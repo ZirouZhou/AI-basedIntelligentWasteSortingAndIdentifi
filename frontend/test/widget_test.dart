@@ -10,4 +10,7 @@ void main() {
     expect(find.text('Classify'), findsOneWidget);
     expect(find.text('Rewards'), findsOneWidget);
   });
+
+
+  
 }
