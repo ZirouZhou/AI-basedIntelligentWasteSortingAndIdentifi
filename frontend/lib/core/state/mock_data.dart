@@ -1,3 +1,16 @@
+// ------------------------------------------------------------------------------------------------
+// EcoSort AI Flutter App — Mock / Demo Data
+// ------------------------------------------------------------------------------------------------
+//
+// [MockData] provides static canned data for development, prototyping, and
+// UI testing. All feature pages use this data directly as a fallback when the
+// backend is not running or when [AppConfig.useMockFallback] is enabled.
+//
+// This file mirrors the seed data in the backend [WasteDataService.seeded]
+// factory so that the frontend can render complete screens without any network
+// dependency.
+// ------------------------------------------------------------------------------------------------
+
 import '../models/app_user.dart';
 import '../models/eco_action.dart';
 import '../models/forum_post.dart';
@@ -5,14 +18,28 @@ import '../models/message_thread.dart';
 import '../models/reward.dart';
 import '../models/waste_category.dart';
 
+/// Central repository of static demo data for the EcoSort AI frontend.
 class MockData {
-  static const categories = [
+  MockData._(); // Prevent instantiation — all members are static.
+
+  // ----------------------------------------------------------------------------------------------
+  // Waste categories
+  // ----------------------------------------------------------------------------------------------
+
+  /// The four standard waste-sorting categories (Blue / Green / Red / Gray).
+  static const categories = <WasteCategory>[
     WasteCategory(
       id: 'recyclable',
       title: 'Recyclable Waste',
-      description: 'Clean paper, plastic, glass, and metal that can be reused.',
+      description:
+          'Clean paper, plastic, glass, and metal that can be reused.',
       binColor: 'Blue',
-      examples: ['Plastic bottles', 'Cardboard', 'Glass jars', 'Aluminum cans'],
+      examples: [
+        'Plastic bottles',
+        'Cardboard',
+        'Glass jars',
+        'Aluminum cans',
+      ],
       recyclingTips: [
         'Rinse containers before disposal.',
         'Flatten cardboard to save space.',
@@ -23,7 +50,12 @@ class MockData {
       title: 'Organic Waste',
       description: 'Food scraps and biodegradable materials for composting.',
       binColor: 'Green',
-      examples: ['Fruit peels', 'Vegetable scraps', 'Tea leaves', 'Eggshells'],
+      examples: [
+        'Fruit peels',
+        'Vegetable scraps',
+        'Tea leaves',
+        'Eggshells',
+      ],
       recyclingTips: [
         'Drain extra liquid before disposal.',
         'Keep plastic bags out of organic bins.',
@@ -32,9 +64,15 @@ class MockData {
     WasteCategory(
       id: 'hazardous',
       title: 'Hazardous Waste',
-      description: 'Items that require special handling to protect people and nature.',
+      description:
+          'Items that require special handling to protect people and nature.',
       binColor: 'Red',
-      examples: ['Batteries', 'Paint', 'Medicine', 'Pesticide bottles'],
+      examples: [
+        'Batteries',
+        'Paint',
+        'Medicine',
+        'Pesticide bottles',
+      ],
       recyclingTips: [
         'Never mix hazardous waste with household waste.',
         'Use official collection points.',
@@ -43,9 +81,15 @@ class MockData {
     WasteCategory(
       id: 'residual',
       title: 'Residual Waste',
-      description: 'Non-recyclable daily waste after sorting useful materials.',
+      description:
+          'Non-recyclable daily waste after sorting useful materials.',
       binColor: 'Gray',
-      examples: ['Used tissues', 'Ceramics', 'Dust', 'Contaminated packaging'],
+      examples: [
+        'Used tissues',
+        'Ceramics',
+        'Dust',
+        'Contaminated packaging',
+      ],
       recyclingTips: [
         'Reduce usage when possible.',
         'Separate recyclables before final disposal.',
@@ -53,18 +97,27 @@ class MockData {
     ),
   ];
 
-  static final demoClassification = ClassificationResult(
+  // ----------------------------------------------------------------------------------------------
+  // Sample classification result
+  // ----------------------------------------------------------------------------------------------
+
+  /// A hard-coded demo classification result used as the default display.
+  static const demoClassification = ClassificationResult(
     itemName: 'Plastic bottle',
-    category: categories[0],
+    category: categories[0], // Recyclable
     confidence: 0.94,
-    suggestions: const [
-      'Empty and rinse the bottle.',
-      'Remove leftover liquid before recycling.',
-      'Place it in the blue recyclable bin.',
+    suggestions: [
+      'Remove the cap and rinse before recycling.',
+      'Crush to save space in the blue bin.',
     ],
   );
 
-  static const ecoActions = [
+  // ----------------------------------------------------------------------------------------------
+  // Eco actions
+  // ----------------------------------------------------------------------------------------------
+
+  /// Sample eco-friendly actions the user has completed or can join.
+  static const ecoActions = <EcoAction>[
     EcoAction(
       id: 'a1',
       title: 'Sorted breakfast waste correctly',
@@ -88,7 +141,12 @@ class MockData {
     ),
   ];
 
-  static const rewards = [
+  // ----------------------------------------------------------------------------------------------
+  // Rewards
+  // ----------------------------------------------------------------------------------------------
+
+  /// Items available in the reward store.
+  static const rewards = <Reward>[
     Reward(
       id: 'r1',
       title: 'Campus Cafe Coupon',
@@ -112,7 +170,12 @@ class MockData {
     ),
   ];
 
-  static const forumPosts = [
+  // ----------------------------------------------------------------------------------------------
+  // Forum posts
+  // ----------------------------------------------------------------------------------------------
+
+  /// Sample community forum discussions.
+  static const forumPosts = <ForumPost>[
     ForumPost(
       id: 'p1',
       author: 'Mia Chen',
@@ -127,7 +190,8 @@ class MockData {
       id: 'p2',
       author: 'Leo Wang',
       title: 'Weekend river cleanup team',
-      content: 'We are forming a small group near the east gate this Saturday.',
+      content:
+          'We are forming a small group near the east gate this Saturday.',
       tag: 'Volunteer',
       likes: 35,
       replies: 8,
@@ -145,7 +209,12 @@ class MockData {
     ),
   ];
 
-  static const messages = [
+  // ----------------------------------------------------------------------------------------------
+  // Messages
+  // ----------------------------------------------------------------------------------------------
+
+  /// Sample in-app message conversations.
+  static const messages = <MessageThread>[
     MessageThread(
       id: 'm1',
       sender: 'EcoSort AI',
@@ -169,6 +238,11 @@ class MockData {
     ),
   ];
 
+  // ----------------------------------------------------------------------------------------------
+  // User profile
+  // ----------------------------------------------------------------------------------------------
+
+  /// The demo user profile displayed throughout the app.
   static const user = AppUser(
     id: 'u1',
     name: 'Alex Green',

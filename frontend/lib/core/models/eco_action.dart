@@ -1,3 +1,19 @@
+// ------------------------------------------------------------------------------------------------
+// EcoSort AI Flutter App — EcoAction Model
+// ------------------------------------------------------------------------------------------------
+//
+// [EcoAction] represents a sustainability task or event that a user can
+// complete to earn green points. Displayed on the Rewards page under
+// "Recent Eco Actions".
+// ------------------------------------------------------------------------------------------------
+
+/// A sustainability task or volunteering event.
+///
+/// * [id]        – unique identifier
+/// * [title]     – short action description
+/// * [impact]    – environmental benefit summary
+/// * [points]    – green points awarded on completion
+/// * [completed] – whether the user has finished this action
 class EcoAction {
   const EcoAction({
     required this.id,
@@ -13,6 +29,7 @@ class EcoAction {
   final int points;
   final bool completed;
 
+  /// Constructs an [EcoAction] from a JSON map received from the backend.
   factory EcoAction.fromJson(Map<String, dynamic> json) {
     return EcoAction(
       id: json['id'] as String,

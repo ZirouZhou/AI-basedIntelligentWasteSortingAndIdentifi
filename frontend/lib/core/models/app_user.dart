@@ -1,3 +1,21 @@
+// ------------------------------------------------------------------------------------------------
+// EcoSort AI Flutter App — AppUser Model
+// ------------------------------------------------------------------------------------------------
+//
+// [AppUser] holds the profile data of the currently signed-in user.
+// Displayed on the Profile page and referenced from the Home page header.
+// ------------------------------------------------------------------------------------------------
+
+/// Profile information for the currently signed-in EcoSort user.
+///
+/// * [id]              – unique user identifier
+/// * [name]            – full display name
+/// * [email]           – email address
+/// * [city]            – user's home city
+/// * [level]           – eco level title (e.g. "Eco Pioneer")
+/// * [greenScore]      – cumulative green score points
+/// * [totalRecycledKg] – total weight of waste properly recycled (kg)
+/// * [avatarInitials]  – initials shown in the avatar circle
 class AppUser {
   const AppUser({
     required this.id,
@@ -19,6 +37,7 @@ class AppUser {
   final double totalRecycledKg;
   final String avatarInitials;
 
+  /// Constructs an [AppUser] from a JSON map received from the backend.
   factory AppUser.fromJson(Map<String, dynamic> json) {
     return AppUser(
       id: json['id'] as String,

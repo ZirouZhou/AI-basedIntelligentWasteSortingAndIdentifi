@@ -1,12 +1,47 @@
+// ------------------------------------------------------------------------------------------------
+// EcoSort AI Flutter App — Application Theme
+// ------------------------------------------------------------------------------------------------
+//
+// [AppTheme] defines the visual identity of the EcoSort AI app. It provides a
+// nature-inspired colour palette (greens, sand, sky) and a Material 3 light
+// theme used throughout the application.
+//
+// Colours:
+//   seed  – primary brand green   (0xFF1B7F5A)
+//   leaf  – accent / secondary    (0xFF2EAD72)
+//   moss  – dark text / headings  (0xFF0F3D2E)
+//   sand  – warm background       (0xFFF6F1E7)
+//   sky   – soft highlight        (0xFFE6F4F1)
+// ------------------------------------------------------------------------------------------------
+
 import 'package:flutter/material.dart';
 
+/// Centralised theme configuration for the EcoSort AI application.
 class AppTheme {
+  // ------------------------------------------------------------------------------------------
+  // Brand colour palette
+  // ------------------------------------------------------------------------------------------
+
+  /// Primary brand colour — a rich forest green.
   static const seed = Color(0xFF1B7F5A);
+
+  /// Secondary accent — a lively leaf green used for highlights and indicators.
   static const leaf = Color(0xFF2EAD72);
+
+  /// Deep moss — used for heading text and strong contrast.
   static const moss = Color(0xFF0F3D2E);
+
+  /// Warm sand — the main background colour of the app.
   static const sand = Color(0xFFF6F1E7);
+
+  /// Soft sky — used for selected states, avatar backgrounds, and subtle accents.
   static const sky = Color(0xFFE6F4F1);
 
+  // ------------------------------------------------------------------------------------------
+  // Material 3 light theme
+  // ------------------------------------------------------------------------------------------
+
+  /// Returns a Material 3 [ThemeData] derived from the EcoSort colour palette.
   static ThemeData get lightTheme {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: seed,

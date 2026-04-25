@@ -1,3 +1,21 @@
+// ------------------------------------------------------------------------------------------------
+// EcoSort AI Flutter App — ForumPost Model
+// ------------------------------------------------------------------------------------------------
+//
+// [ForumPost] represents a single discussion thread in the community forum.
+// Displayed on the Community page as a list of cards.
+// ------------------------------------------------------------------------------------------------
+
+/// A post in the community discussion board.
+///
+/// * [id]        – unique identifier
+/// * [author]    – display name of the person who created the post
+/// * [title]     – post headline
+/// * [content]   – full body text
+/// * [tag]       – topic category label (e.g. "Sorting Tips")
+/// * [likes]     – number of likes
+/// * [replies]   – number of comment replies
+/// * [createdAt] – human-readable timestamp
 class ForumPost {
   const ForumPost({
     required this.id,
@@ -19,6 +37,7 @@ class ForumPost {
   final int replies;
   final String createdAt;
 
+  /// Constructs a [ForumPost] from a JSON map received from the backend.
   factory ForumPost.fromJson(Map<String, dynamic> json) {
     return ForumPost(
       id: json['id'] as String,

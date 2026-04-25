@@ -1,8 +1,26 @@
+// ------------------------------------------------------------------------------------------------
+// EcoSort AI Flutter App — Home Page
+// ------------------------------------------------------------------------------------------------
+//
+// [HomePage] is the default landing screen of EcoSort AI. It provides a
+// dashboard-style overview with:
+//   • App branding and tagline
+//   • A motivational eco-tip card
+//   • Green score and recycling metric cards
+//   • A sorting guide showing the four waste categories
+//
+// All data is sourced from [MockData.categories].
+// ------------------------------------------------------------------------------------------------
+
 import 'package:flutter/material.dart';
 
 import '../../core/state/mock_data.dart';
 import '../../core/theme/app_theme.dart';
 
+/// The landing / dashboard page of EcoSort AI.
+///
+/// Displays the current green score, recycling progress, and a quick
+/// reference guide to the four waste-sorting categories.
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -13,13 +31,16 @@ class HomePage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
       children: [
+        // App title
         Text('EcoSort AI', style: textTheme.headlineLarge),
         const SizedBox(height: 8),
+        // Subtitle / tagline
         Text(
           'Identify waste instantly, build greener habits, and connect with a low-carbon community.',
           style: textTheme.bodyLarge,
         ),
         const SizedBox(height: 20),
+        // Eco motivational banner
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
@@ -48,6 +69,7 @@ class HomePage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
+        // Metric summary cards
         Row(
           children: const [
             Expanded(
@@ -68,8 +90,10 @@ class HomePage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 24),
+        // Sorting guide section header
         Text('Sorting Guide', style: textTheme.titleLarge),
         const SizedBox(height: 12),
+        // Render each waste category as a card
         ...MockData.categories.map(
           (category) => Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -93,6 +117,12 @@ class HomePage extends StatelessWidget {
   }
 }
 
+/// A small card displaying a single metric (Green Score or Recycled weight)
+/// on the Home page dashboard.
+///
+/// * [label] – metric name
+/// * [value] – formatted metric value
+/// * [icon]  – icon shown above the value
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.label,
