@@ -3,6 +3,8 @@
 /// This file defines all REST API endpoints using the [shelf_router] package.
 /// Each route delegates business logic to the [WasteDataService] and returns
 /// JSON-encoded responses.
+library;
+
 import 'dart:convert';
 
 import 'package:shelf/shelf.dart';
@@ -16,6 +18,27 @@ import 'services/waste_data_service.dart';
 /// fetch, classify, and return waste-related information.
 Router buildRouter(WasteDataService service) {
   final router = Router();
+
+  // ---------------------------------------------------------------------------
+  // API root endpoint - returns basic service metadata and available endpoints.
+  // ---------------------------------------------------------------------------
+  router.get('/', (Request request) {
+    return _jsonResponse({
+      'status': 'running',
+      'service': 'EcoSort AI Backend',
+      'version': '0.1.0',
+      'endpoints': [
+        'GET /health',
+        'GET /categories',
+        'POST /classify',
+        'GET /eco-actions',
+        'GET /rewards',
+        'GET /forum-posts',
+        'GET /messages',
+        'GET /profile',
+      ],
+    });
+  });
 
   // ---------------------------------------------------------------------------
   // Health check endpoint – used by monitoring tools or load balancers to
