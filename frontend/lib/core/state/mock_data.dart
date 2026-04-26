@@ -27,74 +27,80 @@ class MockData {
   // ----------------------------------------------------------------------------------------------
 
   /// The four standard waste-sorting categories (Blue / Green / Red / Gray).
+  static const recyclableCategory = WasteCategory(
+    id: 'recyclable',
+    title: 'Recyclable Waste',
+    description: 'Clean paper, plastic, glass, and metal that can be reused.',
+    binColor: 'Blue',
+    examples: [
+      'Plastic bottles',
+      'Cardboard',
+      'Glass jars',
+      'Aluminum cans',
+    ],
+    recyclingTips: [
+      'Rinse containers before disposal.',
+      'Flatten cardboard to save space.',
+    ],
+  );
+
+  static const organicCategory = WasteCategory(
+    id: 'organic',
+    title: 'Organic Waste',
+    description: 'Food scraps and biodegradable materials for composting.',
+    binColor: 'Green',
+    examples: [
+      'Fruit peels',
+      'Vegetable scraps',
+      'Tea leaves',
+      'Eggshells',
+    ],
+    recyclingTips: [
+      'Drain extra liquid before disposal.',
+      'Keep plastic bags out of organic bins.',
+    ],
+  );
+
+  static const hazardousCategory = WasteCategory(
+    id: 'hazardous',
+    title: 'Hazardous Waste',
+    description:
+        'Items that require special handling to protect people and nature.',
+    binColor: 'Red',
+    examples: [
+      'Batteries',
+      'Paint',
+      'Medicine',
+      'Pesticide bottles',
+    ],
+    recyclingTips: [
+      'Never mix hazardous waste with household waste.',
+      'Use official collection points.',
+    ],
+  );
+
+  static const residualCategory = WasteCategory(
+    id: 'residual',
+    title: 'Residual Waste',
+    description: 'Non-recyclable daily waste after sorting useful materials.',
+    binColor: 'Gray',
+    examples: [
+      'Used tissues',
+      'Ceramics',
+      'Dust',
+      'Contaminated packaging',
+    ],
+    recyclingTips: [
+      'Reduce usage when possible.',
+      'Separate recyclables before final disposal.',
+    ],
+  );
+
   static const categories = <WasteCategory>[
-    WasteCategory(
-      id: 'recyclable',
-      title: 'Recyclable Waste',
-      description:
-          'Clean paper, plastic, glass, and metal that can be reused.',
-      binColor: 'Blue',
-      examples: [
-        'Plastic bottles',
-        'Cardboard',
-        'Glass jars',
-        'Aluminum cans',
-      ],
-      recyclingTips: [
-        'Rinse containers before disposal.',
-        'Flatten cardboard to save space.',
-      ],
-    ),
-    WasteCategory(
-      id: 'organic',
-      title: 'Organic Waste',
-      description: 'Food scraps and biodegradable materials for composting.',
-      binColor: 'Green',
-      examples: [
-        'Fruit peels',
-        'Vegetable scraps',
-        'Tea leaves',
-        'Eggshells',
-      ],
-      recyclingTips: [
-        'Drain extra liquid before disposal.',
-        'Keep plastic bags out of organic bins.',
-      ],
-    ),
-    WasteCategory(
-      id: 'hazardous',
-      title: 'Hazardous Waste',
-      description:
-          'Items that require special handling to protect people and nature.',
-      binColor: 'Red',
-      examples: [
-        'Batteries',
-        'Paint',
-        'Medicine',
-        'Pesticide bottles',
-      ],
-      recyclingTips: [
-        'Never mix hazardous waste with household waste.',
-        'Use official collection points.',
-      ],
-    ),
-    WasteCategory(
-      id: 'residual',
-      title: 'Residual Waste',
-      description:
-          'Non-recyclable daily waste after sorting useful materials.',
-      binColor: 'Gray',
-      examples: [
-        'Used tissues',
-        'Ceramics',
-        'Dust',
-        'Contaminated packaging',
-      ],
-      recyclingTips: [
-        'Reduce usage when possible.',
-        'Separate recyclables before final disposal.',
-      ],
-    ),
+    recyclableCategory,
+    organicCategory,
+    hazardousCategory,
+    residualCategory,
   ];
 
   // ----------------------------------------------------------------------------------------------
@@ -104,7 +110,7 @@ class MockData {
   /// A hard-coded demo classification result used as the default display.
   static const demoClassification = ClassificationResult(
     itemName: 'Plastic bottle',
-    category: categories[0], // Recyclable
+    category: recyclableCategory,
     confidence: 0.94,
     suggestions: [
       'Remove the cap and rinse before recycling.',
@@ -190,8 +196,7 @@ class MockData {
       id: 'p2',
       author: 'Leo Wang',
       title: 'Weekend river cleanup team',
-      content:
-          'We are forming a small group near the east gate this Saturday.',
+      content: 'We are forming a small group near the east gate this Saturday.',
       tag: 'Volunteer',
       likes: 35,
       replies: 8,

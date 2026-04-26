@@ -9,7 +9,7 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final user = MockData.user;
+    const user = MockData.user;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),

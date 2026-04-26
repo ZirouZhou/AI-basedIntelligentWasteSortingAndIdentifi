@@ -70,8 +70,8 @@ class HomePage extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         // Metric summary cards
-        Row(
-          children: const [
+        const Row(
+          children: [
             Expanded(
               child: _MetricCard(
                 label: 'Green Score',

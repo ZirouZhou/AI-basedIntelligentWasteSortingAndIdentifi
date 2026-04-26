@@ -17,7 +17,10 @@ class AppConfig {
   ///
   /// On Android emulators, `10.0.2.2` maps to the host machine's `localhost`.
   /// Change this to your server's actual IP or domain in production.
-  static const baseUrl = 'http://10.0.2.2:8080';
+  static const baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8080',
+  );
 
   /// HTTP request timeout [Duration] used by [ApiClient].
   ///

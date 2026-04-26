@@ -31,10 +31,10 @@ class CommunityPage extends StatelessWidget {
           style: textTheme.bodyLarge,
         ),
         const SizedBox(height: 20),
-        Wrap(
+        const Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: const [
+          children: [
             Chip(label: Text('Sorting Tips')),
             Chip(label: Text('Campus News')),
             Chip(label: Text('Volunteer')),
