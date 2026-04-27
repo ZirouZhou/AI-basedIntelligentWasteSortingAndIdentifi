@@ -1,7 +1,8 @@
 param(
   [string]$EmulatorName = "Pixel_10_Pro_XL",
   [int]$BackendPort = 8080,
-  [switch]$SkipRun
+  [switch]$SkipRun,
+  [switch]$HideEmulator
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,6 +56,88 @@ function Get-AndroidSdkPath {
   }
 
   throw "Android SDK not found. Install Android Studio SDK and ensure adb/emulator are available."
+}
+
+function Initialize-JavaHome {
+  if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME "bin\java.exe"))) {
+    return
+  }
+
+  $candidates = @(
+    (Join-Path $env:ProgramFiles "Android\Android Studio\jbr"),
+    (Join-Path ${env:ProgramFiles(x86)} "Android\Android Studio\jbr"),
+    (Join-Path $env:ProgramFiles "Android\Android Studio\jre"),
+    (Join-Path ${env:ProgramFiles(x86)} "Android\Android Studio\jre")
+  ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+  foreach ($candidate in $candidates) {
+    $javaExe = Join-Path $candidate "bin\java.exe"
+    if (Test-Path $javaExe) {
+      $env:JAVA_HOME = $candidate
+      $env:Path = "$candidate\bin;$env:Path"
+      Write-Step "Using JAVA_HOME=$candidate"
+      return
+    }
+  }
+
+  if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
+    throw "Java not found. Install Android Studio or set JAVA_HOME to a JDK path."
+  }
+}
+
+function Get-GradleDistributionName {
+  param([string]$FrontendDir)
+
+  $wrapperPropertiesPath = Join-Path $FrontendDir "android\gradle\wrapper\gradle-wrapper.properties"
+  if (-not (Test-Path $wrapperPropertiesPath)) {
+    return $null
+  }
+
+  $distributionUrlLine = Get-Content $wrapperPropertiesPath |
+    Where-Object { $_ -match "^\s*distributionUrl\s*=" } |
+    Select-Object -First 1
+
+  if (-not $distributionUrlLine) {
+    return $null
+  }
+
+  $distributionUrl = ($distributionUrlLine -replace "^\s*distributionUrl\s*=\s*", "") -replace "\\:", ":"
+  $distributionFile = Split-Path ([System.Uri]::UnescapeDataString($distributionUrl)) -Leaf
+  return $distributionFile -replace "\.zip$", ""
+}
+
+function Clear-StaleGradleWrapperDownload {
+  param([string]$FrontendDir)
+
+  $gradleDistributionName = Get-GradleDistributionName -FrontendDir $FrontendDir
+  if (-not $gradleDistributionName) {
+    return
+  }
+
+  $runningGradleWrapper = Get-CimInstance Win32_Process |
+    Where-Object { $_.Name -eq "java.exe" -and $_.CommandLine -like "*GradleWrapperMain*" } |
+    Select-Object -First 1
+
+  if ($runningGradleWrapper) {
+    Write-Step "Gradle wrapper is already running (PID $($runningGradleWrapper.ProcessId)); keeping existing download lock."
+    return
+  }
+
+  $gradleDistRoot = Join-Path $env:USERPROFILE ".gradle\wrapper\dists\$gradleDistributionName"
+  if (-not (Test-Path $gradleDistRoot)) {
+    return
+  }
+
+  Get-ChildItem -Path $gradleDistRoot -Recurse -Force -Include "*.lck", "*.part" -ErrorAction SilentlyContinue |
+    ForEach-Object {
+      Write-Step "Removing stale Gradle wrapper download file: $($_.FullName)"
+      Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+    }
+
+  Get-ChildItem -Path $gradleDistRoot -Directory -Recurse -Force -ErrorAction SilentlyContinue |
+    Sort-Object FullName -Descending |
+    Where-Object { -not (Get-ChildItem -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue | Select-Object -First 1) } |
+    Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
 function Get-FirstOnlineEmulator {
@@ -166,6 +249,9 @@ if (-not (Get-Command dart -ErrorAction SilentlyContinue)) {
   throw "dart command not found in PATH."
 }
 
+Initialize-JavaHome
+Clear-StaleGradleWrapperDownload -FrontendDir $frontendDir
+
 if (-not (Test-Path $logDir)) {
   New-Item -Path $logDir -ItemType Directory | Out-Null
 }
@@ -210,11 +296,16 @@ try {
     Write-Step "Launching Android emulator: $EmulatorName"
     $emulatorOutLog = Join-Path $logDir "emulator.out.log"
     $emulatorErrLog = Join-Path $logDir "emulator.err.log"
-    Start-Process -FilePath $emulatorPath `
-      -ArgumentList @("-avd", $EmulatorName, "-no-snapshot-load") `
-      -WindowStyle Hidden `
-      -RedirectStandardOutput $emulatorOutLog `
-      -RedirectStandardError $emulatorErrLog | Out-Null
+    $startProcessArgs = @{
+      FilePath = $emulatorPath
+      ArgumentList = @("-avd", $EmulatorName, "-no-snapshot-load")
+      RedirectStandardOutput = $emulatorOutLog
+      RedirectStandardError = $emulatorErrLog
+    }
+    if ($HideEmulator) {
+      $startProcessArgs.WindowStyle = "Hidden"
+    }
+    Start-Process @startProcessArgs | Out-Null
     $deviceId = Wait-ForEmulatorOnline -AdbPath $adbPath -TimeoutSeconds 300
   }
 
