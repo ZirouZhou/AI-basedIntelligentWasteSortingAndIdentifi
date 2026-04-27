@@ -900,35 +900,46 @@ class InMemoryWasteDataService implements WasteDataService {
       return 'Unknown item';
     }
     final lower = text.toLowerCase();
-    if (lower == '电池' || lower.contains('battery')) {
+    if (lower.contains('battery') || text.contains('电池') || text.contains('蓄电池')) {
       return 'Battery';
     }
-    if (lower == '塑料瓶' || lower.contains('plastic bottle')) {
+    if (lower.contains('plastic bottle') ||
+        text.contains('塑料瓶') ||
+        text.contains('矿泉水瓶')) {
       return 'Plastic bottle';
     }
-    if (lower == '纸张' || lower == '废纸' || lower.contains('paper')) {
+    if (lower.contains('paper') || text.contains('纸') || text.contains('纸张')) {
       return 'Paper';
     }
-    if (lower == '玻璃瓶' || lower.contains('glass')) {
+    if (lower.contains('glass') || text.contains('玻璃')) {
       return 'Glass bottle';
     }
-    if (lower == '易拉罐' || lower.contains('can')) {
+    if (lower.contains('can') || text.contains('易拉罐') || text.contains('罐')) {
       return 'Aluminium can';
     }
-    if (lower == '果皮' || lower.contains('fruit peel')) {
+    if (lower.contains('fruit peel') || text.contains('果皮') || text.contains('果')) {
       return 'Fruit peel';
     }
-    if (lower == '菜叶' || lower.contains('vegetable')) {
+    if (lower.contains('vegetable') || text.contains('菜叶') || text.contains('菜')) {
       return 'Vegetable scraps';
     }
-    if (lower == '药品' || lower.contains('medicine')) {
+    if (lower.contains('medicine') || text.contains('药品') || text.contains('药')) {
       return 'Medicine';
     }
-    if (lower == '油漆' || lower.contains('paint')) {
+    if (lower.contains('paint') || text.contains('油漆')) {
       return 'Paint';
     }
-    if (lower == '餐巾纸' || lower.contains('tissue')) {
+    if (lower.contains('tissue') || text.contains('餐巾纸') || text.contains('纸巾')) {
       return 'Used tissue';
+    }
+    if (lower.contains('blanket') || text.contains('毯子') || text.contains('毛毯')) {
+      return 'Blanket';
+    }
+    if (lower.contains('textile') || text.contains('衣物') || text.contains('纺织')) {
+      return 'Textiles';
+    }
+    if (lower.contains('ceramic') || text.contains('陶瓷')) {
+      return 'Ceramics';
     }
     if (RegExp(r'[\u4e00-\u9fff]').hasMatch(text)) {
       return 'Unspecified item';

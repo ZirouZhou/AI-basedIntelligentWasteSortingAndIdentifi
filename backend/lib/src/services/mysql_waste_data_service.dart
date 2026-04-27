@@ -376,6 +376,8 @@ class MySqlWasteDataService implements WasteDataService {
       ddl: 'ALTER TABLE app_users ADD COLUMN avatar_url TEXT NULL',
     );
 
+    await _upgradeAvatarUrlTypeIfNeeded();
+
     await _addColumnIfMissing(
       table: 'app_users',
       column: 'password_hash',
@@ -421,6 +423,29 @@ class MySqlWasteDataService implements WasteDataService {
     if (dataType == 'text') {
       await _connection.query(
         'ALTER TABLE chat_messages MODIFY content MEDIUMTEXT NOT NULL',
+      );
+    }
+  }
+
+  Future<void> _upgradeAvatarUrlTypeIfNeeded() async {
+    final typeResult = await _connection.query(
+      '''
+      SELECT DATA_TYPE
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ?
+        AND TABLE_NAME = 'app_users'
+        AND COLUMN_NAME = 'avatar_url'
+      LIMIT 1
+      ''',
+      [_config.database],
+    );
+    if (typeResult.isEmpty) {
+      return;
+    }
+    final dataType = _readText(typeResult.first[0]).toLowerCase();
+    if (dataType == 'text' || dataType == 'mediumtext' || dataType == 'varchar') {
+      await _connection.query(
+        'ALTER TABLE app_users MODIFY avatar_url LONGTEXT NULL',
       );
     }
   }
@@ -2017,10 +2042,19 @@ class MySqlWasteDataService implements WasteDataService {
     if (user == null) {
       throw StateError('User not found: $userId');
     }
-    await _connection.query(
-      'UPDATE app_users SET avatar_url = ? WHERE id = ?',
-      [safeUrl, userId],
-    );
+    try {
+      await _connection.query(
+        'UPDATE app_users SET avatar_url = ? WHERE id = ?',
+        [safeUrl, userId],
+      );
+    } catch (error) {
+      if ('$error'.contains('Data too long for column')) {
+        throw StateError(
+          'Avatar image is too large. Please choose a smaller image (suggested <= 1MB).',
+        );
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -2092,15 +2126,19 @@ class MySqlWasteDataService implements WasteDataService {
 
     return result
         .map(
-          (row) => UserRecognitionRecord(
-            id: _readInt(row[0]),
-            fileName: _readText(row[1]),
-            imageUrl: _readText(row[2]),
-            categoryLabel: _readText(row[3]),
-            rubbishLabel: _readText(row[4]),
-            confidence: _readDouble(row[5]),
-            createdAt: _readText(row[6]),
-          ),
+          (row) {
+            final englishCategory = _toEnglishCategoryLabel(_readText(row[3]));
+            final englishItem = _toEnglishItemName(_readText(row[4]));
+            return UserRecognitionRecord(
+              id: _readInt(row[0]),
+              fileName: _readText(row[1]),
+              imageUrl: _readText(row[2]),
+              categoryLabel: englishCategory,
+              rubbishLabel: englishItem,
+              confidence: _readDouble(row[5]),
+              createdAt: _readText(row[6]),
+            );
+          },
         )
         .toList(growable: false);
   }
@@ -2601,6 +2639,7 @@ class MySqlWasteDataService implements WasteDataService {
       labels: bestElement.rubbish,
       categories: categories,
     );
+    final englishCategoryTitle = _toEnglishCategoryLabel(mappedCategory.title);
     final ukMapping = _toUkCategory(mappedCategory.id);
     final identifiedItem = bestElement.rubbish.isEmpty
         ? sourceName
@@ -2629,10 +2668,10 @@ class MySqlWasteDataService implements WasteDataService {
         response.requestId,
         bestElement.category,
         bestElement.categoryScore,
-        bestElement.rubbish,
+        identifiedItem,
         bestElement.rubbishScore,
         mappedCategory.id,
-        mappedCategory.title,
+        englishCategoryTitle,
         jsonEncode(response.rawPayload),
       ],
     );
@@ -2820,41 +2859,87 @@ class MySqlWasteDataService implements WasteDataService {
     }
   }
 
+  String _toEnglishCategoryLabel(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) {
+      return 'General Waste';
+    }
+    final lower = text.toLowerCase();
+    if (lower.contains('hazardous') ||
+        lower.contains('harm') ||
+        lower.contains('danger') ||
+        text.contains('有害')) {
+      return 'Household Hazardous Waste';
+    }
+    if (lower.contains('organic') ||
+        lower.contains('food') ||
+        lower.contains('kitchen') ||
+        lower.contains('wet') ||
+        text.contains('厨余') ||
+        text.contains('湿')) {
+      return 'Food Waste';
+    }
+    if (lower.contains('recyclable') ||
+        lower.contains('recycle') ||
+        text.contains('可回收')) {
+      return 'Mixed Recyclables';
+    }
+    if (lower.contains('residual') ||
+        lower.contains('general') ||
+        lower.contains('other') ||
+        text.contains('其他') ||
+        text.contains('残余')) {
+      return 'General Waste';
+    }
+    return text;
+  }
+
   String _toEnglishItemName(String raw) {
     final text = raw.trim();
     if (text.isEmpty) {
       return 'Unknown item';
     }
     final lower = text.toLowerCase();
-    if (lower == '电池' || lower.contains('battery')) {
+    if (lower.contains('battery') || text.contains('电池') || text.contains('蓄电池')) {
       return 'Battery';
     }
-    if (lower == '塑料瓶' || lower.contains('plastic bottle')) {
+    if (lower.contains('plastic bottle') ||
+        text.contains('塑料瓶') ||
+        text.contains('矿泉水瓶')) {
       return 'Plastic bottle';
     }
-    if (lower == '纸张' || lower == '废纸' || lower.contains('paper')) {
+    if (lower.contains('paper') || text.contains('纸') || text.contains('纸张')) {
       return 'Paper';
     }
-    if (lower == '玻璃瓶' || lower.contains('glass')) {
+    if (lower.contains('glass') || text.contains('玻璃')) {
       return 'Glass bottle';
     }
-    if (lower == '易拉罐' || lower.contains('can')) {
+    if (lower.contains('can') || text.contains('易拉罐') || text.contains('罐')) {
       return 'Aluminium can';
     }
-    if (lower == '果皮' || lower.contains('fruit peel')) {
+    if (lower.contains('fruit peel') || text.contains('果皮') || text.contains('果')) {
       return 'Fruit peel';
     }
-    if (lower == '菜叶' || lower.contains('vegetable')) {
+    if (lower.contains('vegetable') || text.contains('菜叶') || text.contains('菜')) {
       return 'Vegetable scraps';
     }
-    if (lower == '药品' || lower.contains('medicine')) {
+    if (lower.contains('medicine') || text.contains('药品') || text.contains('药')) {
       return 'Medicine';
     }
-    if (lower == '油漆' || lower.contains('paint')) {
+    if (lower.contains('paint') || text.contains('油漆')) {
       return 'Paint';
     }
-    if (lower == '餐巾纸' || lower.contains('tissue')) {
+    if (lower.contains('tissue') || text.contains('餐巾纸') || text.contains('纸巾')) {
       return 'Used tissue';
+    }
+    if (lower.contains('blanket') || text.contains('毯子') || text.contains('毛毯')) {
+      return 'Blanket';
+    }
+    if (lower.contains('textile') || text.contains('衣物') || text.contains('纺织')) {
+      return 'Textiles';
+    }
+    if (lower.contains('ceramic') || text.contains('陶瓷')) {
+      return 'Ceramics';
     }
     if (RegExp(r'[\u4e00-\u9fff]').hasMatch(text)) {
       return 'Unspecified item';

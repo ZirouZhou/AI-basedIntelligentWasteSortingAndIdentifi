@@ -795,6 +795,11 @@ Router buildRouter(WasteDataService service) {
       return _jsonResponse({'ok': true});
     } on StateError catch (error) {
       return _jsonResponse({'error': error.message}, statusCode: 400);
+    } catch (_) {
+      return _jsonResponse(
+        {'error': 'Failed to update avatar. Please try a smaller image.'},
+        statusCode: 500,
+      );
     }
   });
 

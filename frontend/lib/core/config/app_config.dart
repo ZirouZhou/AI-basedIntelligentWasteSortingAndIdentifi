@@ -48,5 +48,5 @@ class AppConfig {
   /// Note: AMap weather API is mainly designed for Chinese administrative
   /// regions. UK requests may return empty `lives`, in which case the UI shows
   /// a graceful "no data" state.
-  static const ukWeatherCityQuery = '英国';
+  static const ukWeatherCityQuery = 'London';
 }
