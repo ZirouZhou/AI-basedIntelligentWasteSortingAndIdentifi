@@ -116,6 +116,13 @@ class MockData {
       'Remove the cap and rinse before recycling.',
       'Crush to save space in the blue bin.',
     ],
+    identifiedItem: 'Plastic bottle',
+    englandCategoryName: 'Mixed Recyclables',
+    ukDisposalBin: 'Household recycling bin',
+    ukDisposalTips: [
+      'Rinse containers before placing them in recycling.',
+      'Check local council rules for mixed recycling.',
+    ],
   );
 
   // ----------------------------------------------------------------------------------------------

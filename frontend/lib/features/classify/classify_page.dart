@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -10,9 +12,11 @@ class ClassifyPage extends StatefulWidget {
   const ClassifyPage({
     super.key,
     required this.userId,
+    this.onClassificationSuccess,
   });
 
   final String userId;
+  final VoidCallback? onClassificationSuccess;
 
   @override
   State<ClassifyPage> createState() => _ClassifyPageState();
@@ -20,23 +24,26 @@ class ClassifyPage extends StatefulWidget {
 
 class _ClassifyPageState extends State<ClassifyPage> {
   final _apiClient = ApiClient();
-  final _controller = TextEditingController(text: 'Plastic bottle');
   final _imagePicker = ImagePicker();
   ClassificationResult? _result = MockData.demoClassification;
   bool _isClassifying = false;
   String? _statusMessage;
+  Uint8List? _selectedImageBytes;
   String? _selectedImageName;
 
   @override
   void dispose() {
     _apiClient.dispose();
-    _controller.dispose();
     super.dispose();
   }
 
   Future<void> _classify() async {
-    final itemName = _controller.text.trim();
-    if (itemName.isEmpty) {
+    final selectedImageBytes = _selectedImageBytes;
+    final selectedImageName = _selectedImageName;
+    if (selectedImageBytes == null || selectedImageName == null) {
+      setState(() {
+        _statusMessage = 'Please select an image first.';
+      });
       return;
     }
 
@@ -46,19 +53,25 @@ class _ClassifyPageState extends State<ClassifyPage> {
     });
 
     try {
-      final result = await _apiClient.classifyWaste(itemName);
-      if (!mounted) {
-        return;
-      }
-      setState(() => _result = result);
-    } catch (_) {
+      final result = await _apiClient.classifyWasteImage(
+        imageBytes: selectedImageBytes,
+        fileName: selectedImageName,
+        submittedBy: widget.userId,
+      );
       if (!mounted) {
         return;
       }
       setState(() {
-        _result = _classifyLocally(itemName);
-        _statusMessage =
-            'Backend is not available. Showing a local demo result instead.';
+        _result = result;
+        _statusMessage = 'Image classified successfully.';
+      });
+      widget.onClassificationSuccess?.call();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _statusMessage = 'Image recognition failed: $error';
       });
     } finally {
       if (mounted) {
@@ -76,11 +89,6 @@ class _ClassifyPageState extends State<ClassifyPage> {
   }
 
   Future<void> _classifyFromSource(ImageSource source) async {
-    setState(() {
-      _isClassifying = true;
-      _statusMessage = null;
-    });
-
     try {
       final picked = await _imagePicker.pickImage(
         source: source,
@@ -88,60 +96,27 @@ class _ClassifyPageState extends State<ClassifyPage> {
         maxWidth: 1600,
       );
       if (picked == null) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _isClassifying = false;
-          _statusMessage = 'No image selected.';
-        });
         return;
       }
 
       final bytes = await picked.readAsBytes();
-      final result = await _apiClient.classifyWasteImage(
-        imageBytes: bytes,
-        fileName: picked.name,
-        submittedBy: widget.userId,
-      );
       if (!mounted) {
         return;
       }
       setState(() {
+        _selectedImageBytes = bytes;
         _selectedImageName = picked.name;
-        _result = result;
+        _statusMessage =
+            'Image selected: ${picked.name}. Tap "Start AI Classification".';
       });
     } catch (_) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _statusMessage =
-            'Image recognition failed. Please check backend and Aliyun credentials.';
+        _statusMessage = 'Failed to select image. Please try again.';
       });
-    } finally {
-      if (mounted) {
-        setState(() => _isClassifying = false);
-      }
     }
-  }
-
-  ClassificationResult _classifyLocally(String itemName) {
-    final lower = itemName.toLowerCase();
-    final category = lower.contains('battery') || lower.contains('medicine')
-        ? MockData.categories[2]
-        : lower.contains('food') || lower.contains('banana')
-            ? MockData.categories[1]
-            : lower.contains('tissue') || lower.contains('ceramic')
-                ? MockData.categories[3]
-                : MockData.categories[0];
-
-    return ClassificationResult(
-      itemName: itemName,
-      category: category,
-      confidence: 0.91,
-      suggestions: category.recyclingTips,
-    );
   }
 
   @override
@@ -154,7 +129,7 @@ class _ClassifyPageState extends State<ClassifyPage> {
         Text('AI Waste Classification', style: textTheme.headlineLarge),
         const SizedBox(height: 8),
         Text(
-          'Upload or describe an item to identify the correct waste category.',
+          'Upload a photo to identify the correct waste category.',
           style: textTheme.bodyLarge,
         ),
         const SizedBox(height: 20),
@@ -209,20 +184,6 @@ class _ClassifyPageState extends State<ClassifyPage> {
           ),
         ),
         const SizedBox(height: 18),
-        TextField(
-          controller: _controller,
-          decoration: InputDecoration(
-            labelText: 'Item name',
-            hintText: 'Example: plastic bottle, banana peel, battery',
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(20),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
         FilledButton.icon(
           onPressed: _isClassifying ? null : _classify,
           icon: _isClassifying
@@ -294,6 +255,16 @@ class _ClassificationCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
+            Text('Identified Item', style: textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(result.identifiedItem),
+            const SizedBox(height: 18),
+            Text('British Standard', style: textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(result.englandCategoryName),
+            const SizedBox(height: 6),
+            Text('Recommended Bin: ${result.ukDisposalBin}'),
+            const SizedBox(height: 18),
             Text('Recommended Bin', style: textTheme.titleMedium),
             const SizedBox(height: 6),
             Text('${result.category.binColor} bin'),
@@ -313,6 +284,24 @@ class _ClassificationCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (result.ukDisposalTips.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('UK Disposal Tips', style: textTheme.titleMedium),
+              const SizedBox(height: 8),
+              ...result.ukDisposalTips.map(
+                (tip) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.public, size: 18, color: AppTheme.seed),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(tip)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

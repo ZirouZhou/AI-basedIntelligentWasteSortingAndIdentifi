@@ -2557,12 +2557,20 @@ class MySqlWasteDataService implements WasteDataService {
     final categories = await getCategories();
     final normalized = itemName.toLowerCase();
     final category = _matchCategory(normalized, categories);
+    final ukMapping = _toUkCategory(category.id);
+    final identifiedItem = itemName.trim().isEmpty
+        ? 'Unknown item'
+        : _toEnglishItemName(itemName.trim());
 
     return ClassificationResult(
       itemName: itemName.trim(),
       category: category,
       confidence: _confidenceFor(normalized),
       suggestions: category.recyclingTips,
+      identifiedItem: identifiedItem,
+      englandCategoryName: ukMapping.name,
+      ukDisposalBin: ukMapping.bin,
+      ukDisposalTips: ukMapping.tips,
     );
   }
 
@@ -2577,10 +2585,10 @@ class MySqlWasteDataService implements WasteDataService {
 
     final client = _aliyunClient;
     if (client == null) {
-      // Safe fallback: classify by file name keywords when cloud vision path is
-      // unavailable (credentials not configured).
-      final guess = sourceName.replaceAll(RegExp(r'\.[^.]+$'), ' ');
-      return classify(guess.trim().isEmpty ? 'waste item' : guess.trim());
+      throw StateError(
+        'Aliyun image recognition is not configured. '
+        'Set ALIYUN_ACCESS_KEY_ID and ALIYUN_ACCESS_KEY_SECRET, then restart backend.',
+      );
     }
 
     final response = await client.classifyRubbishByImageBytes(
@@ -2593,6 +2601,10 @@ class MySqlWasteDataService implements WasteDataService {
       labels: bestElement.rubbish,
       categories: categories,
     );
+    final ukMapping = _toUkCategory(mappedCategory.id);
+    final identifiedItem = bestElement.rubbish.isEmpty
+        ? sourceName
+        : _toEnglishItemName(bestElement.rubbish);
 
     await _connection.query(
       '''
@@ -2626,12 +2638,16 @@ class MySqlWasteDataService implements WasteDataService {
     );
 
     return ClassificationResult(
-      itemName: bestElement.rubbish.isEmpty ? sourceName : bestElement.rubbish,
+      itemName: identifiedItem,
       category: mappedCategory,
       confidence: bestElement.rubbishScore > 0
           ? bestElement.rubbishScore
           : bestElement.categoryScore,
       suggestions: mappedCategory.recyclingTips,
+      identifiedItem: identifiedItem,
+      englandCategoryName: ukMapping.name,
+      ukDisposalBin: ukMapping.bin,
+      ukDisposalTips: ukMapping.tips,
     );
   }
 
@@ -2761,6 +2777,89 @@ class MySqlWasteDataService implements WasteDataService {
 
   WasteCategory _categoryById(List<WasteCategory> categories, String id) {
     return categories.firstWhere((item) => item.id == id);
+  }
+
+  _UkCategoryMapping _toUkCategory(String categoryId) {
+    switch (categoryId) {
+      case 'recyclable':
+        return const _UkCategoryMapping(
+          name: 'Mixed Recyclables',
+          bin: 'Household recycling bin',
+          tips: [
+            'Rinse food residue from bottles, cans, and jars.',
+            'Follow your local council list for accepted recyclables.',
+          ],
+        );
+      case 'organic':
+        return const _UkCategoryMapping(
+          name: 'Food Waste',
+          bin: 'Food waste caddy',
+          tips: [
+            'Place scraps in the food caddy with compostable liner if allowed.',
+            'Keep plastics and packaging out of food waste collection.',
+          ],
+        );
+      case 'hazardous':
+        return const _UkCategoryMapping(
+          name: 'Household Hazardous Waste',
+          bin: 'Household Waste Recycling Centre (HWRC)',
+          tips: [
+            'Do not place hazardous items in normal household bins.',
+            'Take batteries, chemicals, and paint to approved collection points.',
+          ],
+        );
+      default:
+        return const _UkCategoryMapping(
+          name: 'General Waste',
+          bin: 'General waste (black/grey bin)',
+          tips: [
+            'Only dispose non-recyclable items in general waste.',
+            'Try to separate recyclable and food waste first.',
+          ],
+        );
+    }
+  }
+
+  String _toEnglishItemName(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) {
+      return 'Unknown item';
+    }
+    final lower = text.toLowerCase();
+    if (lower == '电池' || lower.contains('battery')) {
+      return 'Battery';
+    }
+    if (lower == '塑料瓶' || lower.contains('plastic bottle')) {
+      return 'Plastic bottle';
+    }
+    if (lower == '纸张' || lower == '废纸' || lower.contains('paper')) {
+      return 'Paper';
+    }
+    if (lower == '玻璃瓶' || lower.contains('glass')) {
+      return 'Glass bottle';
+    }
+    if (lower == '易拉罐' || lower.contains('can')) {
+      return 'Aluminium can';
+    }
+    if (lower == '果皮' || lower.contains('fruit peel')) {
+      return 'Fruit peel';
+    }
+    if (lower == '菜叶' || lower.contains('vegetable')) {
+      return 'Vegetable scraps';
+    }
+    if (lower == '药品' || lower.contains('medicine')) {
+      return 'Medicine';
+    }
+    if (lower == '油漆' || lower.contains('paint')) {
+      return 'Paint';
+    }
+    if (lower == '餐巾纸' || lower.contains('tissue')) {
+      return 'Used tissue';
+    }
+    if (RegExp(r'[\u4e00-\u9fff]').hasMatch(text)) {
+      return 'Unspecified item';
+    }
+    return text;
   }
 
   bool _containsAny(String text, List<String> keywords) {
@@ -3170,4 +3269,16 @@ class _SeedChatMessage {
   final String messageType;
   final String content;
   final String createdAt;
+}
+
+class _UkCategoryMapping {
+  const _UkCategoryMapping({
+    required this.name,
+    required this.bin,
+    required this.tips,
+  });
+
+  final String name;
+  final String bin;
+  final List<String> tips;
 }

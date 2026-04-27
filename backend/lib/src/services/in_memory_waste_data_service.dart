@@ -795,12 +795,18 @@ class InMemoryWasteDataService implements WasteDataService {
   Future<ClassificationResult> classify(String itemName) async {
     final normalized = itemName.toLowerCase();
     final category = _matchCategory(normalized);
+    final uk = _toUkCategory(category.id);
+    final safeName = itemName.trim().isEmpty ? 'Unknown item' : _toEnglishItemName(itemName.trim());
 
     return ClassificationResult(
       itemName: itemName.trim(),
       category: category,
       confidence: _confidenceFor(normalized),
       suggestions: category.recyclingTips,
+      identifiedItem: safeName,
+      englandCategoryName: uk.name,
+      ukDisposalBin: uk.bin,
+      ukDisposalTips: uk.tips,
     );
   }
 
@@ -887,4 +893,99 @@ class InMemoryWasteDataService implements WasteDataService {
 
   @override
   Future<void> close() async {}
+
+  String _toEnglishItemName(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) {
+      return 'Unknown item';
+    }
+    final lower = text.toLowerCase();
+    if (lower == '电池' || lower.contains('battery')) {
+      return 'Battery';
+    }
+    if (lower == '塑料瓶' || lower.contains('plastic bottle')) {
+      return 'Plastic bottle';
+    }
+    if (lower == '纸张' || lower == '废纸' || lower.contains('paper')) {
+      return 'Paper';
+    }
+    if (lower == '玻璃瓶' || lower.contains('glass')) {
+      return 'Glass bottle';
+    }
+    if (lower == '易拉罐' || lower.contains('can')) {
+      return 'Aluminium can';
+    }
+    if (lower == '果皮' || lower.contains('fruit peel')) {
+      return 'Fruit peel';
+    }
+    if (lower == '菜叶' || lower.contains('vegetable')) {
+      return 'Vegetable scraps';
+    }
+    if (lower == '药品' || lower.contains('medicine')) {
+      return 'Medicine';
+    }
+    if (lower == '油漆' || lower.contains('paint')) {
+      return 'Paint';
+    }
+    if (lower == '餐巾纸' || lower.contains('tissue')) {
+      return 'Used tissue';
+    }
+    if (RegExp(r'[\u4e00-\u9fff]').hasMatch(text)) {
+      return 'Unspecified item';
+    }
+    return text;
+  }
+
+  _UkCategoryMapping _toUkCategory(String categoryId) {
+    switch (categoryId) {
+      case 'recyclable':
+        return const _UkCategoryMapping(
+          name: 'Mixed Recyclables',
+          bin: 'Household recycling bin',
+          tips: [
+            'Rinse food residue from bottles, cans, and jars.',
+            'Follow your local council list for accepted recyclables.',
+          ],
+        );
+      case 'organic':
+        return const _UkCategoryMapping(
+          name: 'Food Waste',
+          bin: 'Food waste caddy',
+          tips: [
+            'Place scraps in the food caddy with compostable liner if allowed.',
+            'Keep plastics and packaging out of food waste collection.',
+          ],
+        );
+      case 'hazardous':
+        return const _UkCategoryMapping(
+          name: 'Household Hazardous Waste',
+          bin: 'Household Waste Recycling Centre (HWRC)',
+          tips: [
+            'Do not place hazardous items in normal household bins.',
+            'Take batteries, chemicals, and paint to approved collection points.',
+          ],
+        );
+      default:
+        return const _UkCategoryMapping(
+          name: 'General Waste',
+          bin: 'General waste (black/grey bin)',
+          tips: [
+            'Only dispose non-recyclable items in general waste.',
+            'Try to separate recyclable and food waste first.',
+          ],
+        );
+    }
+  }
+}
+
+class _UkCategoryMapping {
+  const _UkCategoryMapping({
+    required this.name,
+    required this.bin,
+    required this.tips,
+  });
+
+  final String name;
+  final String bin;
+  final List<String> tips;
 }

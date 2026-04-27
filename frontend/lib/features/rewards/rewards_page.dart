@@ -8,9 +8,11 @@ class RewardsPage extends StatefulWidget {
   const RewardsPage({
     super.key,
     required this.userId,
+    this.onPointsUpdated,
   });
 
   final String userId;
+  final VoidCallback? onPointsUpdated;
 
   @override
   State<RewardsPage> createState() => _RewardsPageState();
@@ -116,6 +118,7 @@ class _RewardsPageState extends State<RewardsPage> {
             'Evaluated successfully: -${result.record.co2ReductionKg.toStringAsFixed(2)} kg CO2, +${result.record.pointsAwarded} points.';
       });
       await _loadAll();
+      widget.onPointsUpdated?.call();
     } catch (error) {
       setState(() => _error = error.toString());
     } finally {
@@ -141,6 +144,7 @@ class _RewardsPageState extends State<RewardsPage> {
             'Badge redeemed: ${result.badge.title}. Remaining points: ${result.newPointsBalance}.';
       });
       await _loadAll();
+      widget.onPointsUpdated?.call();
     } catch (error) {
       setState(() => _error = error.toString());
     } finally {

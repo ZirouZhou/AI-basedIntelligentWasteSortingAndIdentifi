@@ -1,5 +1,6 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -8,14 +9,17 @@ import '../../core/models/forum_post.dart';
 import '../../core/models/profile_history_models.dart';
 import '../../core/services/api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../auth/auth_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({
     super.key,
     required this.userId,
+    required this.profileDataRefreshSignal,
   });
 
   final String userId;
+  final ValueListenable<int> profileDataRefreshSignal;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -38,13 +42,22 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
+    widget.profileDataRefreshSignal.addListener(_onProfileDataRefreshSignal);
     _loadAll();
   }
 
   @override
   void dispose() {
+    widget.profileDataRefreshSignal.removeListener(_onProfileDataRefreshSignal);
     _apiClient.dispose();
     super.dispose();
+  }
+
+  Future<void> _onProfileDataRefreshSignal() async {
+    if (!mounted) {
+      return;
+    }
+    await _loadAll();
   }
 
   Future<void> _loadAll() async {
@@ -56,10 +69,10 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final results = await Future.wait<dynamic>([
         _apiClient.fetchProfile(widget.userId),
-        _apiClient.fetchRecognitionHistory(userId: widget.userId, limit: 20),
-        _apiClient.fetchPointHistory(userId: widget.userId, limit: 20),
-        _apiClient.fetchBadgeHistory(userId: widget.userId, limit: 20),
-        _apiClient.fetchUserForumPosts(userId: widget.userId, limit: 20),
+        _apiClient.fetchRecognitionHistory(userId: widget.userId, limit: 50),
+        _apiClient.fetchPointHistory(userId: widget.userId, limit: 50),
+        _apiClient.fetchBadgeHistory(userId: widget.userId, limit: 50),
+        _apiClient.fetchUserForumPosts(userId: widget.userId, limit: 50),
       ]);
 
       if (!mounted) {
@@ -351,6 +364,46 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _openRecognitionHistoryList() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _RecognitionHistoryListPage(records: _recognitionHistory),
+      ),
+    );
+  }
+
+  Future<void> _openPointBadgeHistoryList() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _PointBadgeHistoryListPage(
+          pointHistory: _pointHistory,
+          badgeHistory: _badgeHistory,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMyPostsList() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _MyPostsListPage(posts: _myPosts),
+      ),
+    );
+  }
+
+  Future<void> _logout() async {
+    _apiClient.clearAuthToken();
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) => const AuthPage(),
+      ),
+      (_) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -462,92 +515,296 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
             ),
           const SizedBox(height: 22),
-          Text('Recognition History', style: textTheme.titleLarge),
-          const SizedBox(height: 8),
           _HistoryCard(
-            child: _recognitionHistory.isEmpty
-                ? const Text('No recognition history yet.')
-                : Column(
-                    children: _recognitionHistory
-                        .map(
-                          (item) => ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text('${item.rubbishLabel} (${item.categoryLabel})'),
-                            subtitle: Text('${item.createdAt} · ${item.fileName}'),
-                            trailing: Text('${(item.confidence * 100).toStringAsFixed(0)}%'),
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
-          ),
-          const SizedBox(height: 16),
-          Text('Points & Badge History', style: textTheme.titleLarge),
-          const SizedBox(height: 8),
-          _HistoryCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Point Records', style: textTheme.titleMedium),
-                const SizedBox(height: 6),
-                if (_pointHistory.isEmpty)
-                  const Text('No point history yet.')
-                else
-                  ..._pointHistory.map(
-                    (item) => ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(item.transactionType),
-                      subtitle: Text(item.createdAt),
-                      trailing: Text(
-                        item.changeAmount > 0
-                            ? '+${item.changeAmount}'
-                            : '${item.changeAmount}',
-                        style: TextStyle(
-                          color: item.changeAmount >= 0 ? Colors.green[700] : Colors.red[700],
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                const Divider(height: 24),
-                Text('Badge Records', style: textTheme.titleMedium),
-                const SizedBox(height: 6),
-                if (_badgeHistory.isEmpty)
-                  const Text('No badge history yet.')
-                else
-                  ..._badgeHistory.map(
-                    (item) => ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('${item.badgeIcon} ${item.badgeTitle}'),
-                      subtitle: Text(item.redeemedAt),
-                      trailing: Text('-${item.requiredPoints}'),
-                    ),
-                  ),
-              ],
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('Recognition History', style: textTheme.titleLarge),
+              subtitle: Text(
+                _recognitionHistory.isEmpty
+                    ? 'No recognition history yet.'
+                    : '${_recognitionHistory.length} records',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _openRecognitionHistoryList,
             ),
           ),
           const SizedBox(height: 16),
-          Text('My Posts', style: textTheme.titleLarge),
-          const SizedBox(height: 8),
           _HistoryCard(
-            child: _myPosts.isEmpty
-                ? const Text('No posts yet.')
-                : Column(
-                    children: _myPosts
-                        .map(
-                          (post) => ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(post.title),
-                            subtitle: Text('${post.createdAt} · ${post.tag}'),
-                            trailing: Text('❤️ ${post.likes}'),
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('Points & Badge History', style: textTheme.titleLarge),
+              subtitle: Text(
+                '${_pointHistory.length} point records, ${_badgeHistory.length} badge records',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _openPointBadgeHistoryList,
+            ),
           ),
+          const SizedBox(height: 16),
+          _HistoryCard(
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('My Posts', style: textTheme.titleLarge),
+              subtitle: Text(
+                _myPosts.isEmpty ? 'No posts yet.' : '${_myPosts.length} posts',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _openMyPostsList,
+            ),
+          ),
+          const SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+            label: const Text('Log out'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red[700],
+              side: BorderSide(color: Colors.red[300]!),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecognitionHistoryListPage extends StatelessWidget {
+  const _RecognitionHistoryListPage({
+    required this.records,
+  });
+
+  final List<RecognitionHistoryRecord> records;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Recognition History')),
+      body: records.isEmpty
+          ? const Center(child: Text('No recognition history yet.'))
+          : ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemBuilder: (context, index) {
+                final item = records[index];
+                return ListTile(
+                  title: Text('${item.rubbishLabel} (${item.categoryLabel})'),
+                  subtitle: Text('${item.createdAt} | ${item.fileName}'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => _RecognitionHistoryDetailPage(record: item),
+                      ),
+                    );
+                  },
+                );
+              },
+              separatorBuilder: (context, index) => const Divider(height: 1),
+              itemCount: records.length,
+            ),
+    );
+  }
+}
+
+class _RecognitionHistoryDetailPage extends StatelessWidget {
+  const _RecognitionHistoryDetailPage({
+    required this.record,
+  });
+
+  final RecognitionHistoryRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Recognition Detail')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(record.rubbishLabel, style: textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          _DetailRow(label: 'Category', value: record.categoryLabel),
+          _DetailRow(label: 'Confidence', value: '${(record.confidence * 100).toStringAsFixed(0)}%'),
+          _DetailRow(label: 'File', value: record.fileName),
+          _DetailRow(label: 'Time', value: record.createdAt),
+          _DetailRow(label: 'Image URL', value: record.imageUrl),
+        ],
+      ),
+    );
+  }
+}
+
+class _PointBadgeHistoryListPage extends StatelessWidget {
+  const _PointBadgeHistoryListPage({
+    required this.pointHistory,
+    required this.badgeHistory,
+  });
+
+  final List<PointHistoryRecord> pointHistory;
+  final List<BadgeHistoryRecord> badgeHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Points & Badges')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('Point Records'),
+          const SizedBox(height: 8),
+          if (pointHistory.isEmpty)
+            const ListTile(title: Text('No point history yet.'))
+          else
+            ...pointHistory.map(
+              (item) => ListTile(
+                title: Text(item.transactionType),
+                subtitle: Text(item.createdAt),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => _PointHistoryDetailPage(record: item),
+                    ),
+                  );
+                },
+              ),
+            ),
+          const Divider(height: 24),
+          const Text('Badge Records'),
+          const SizedBox(height: 8),
+          if (badgeHistory.isEmpty)
+            const ListTile(title: Text('No badge history yet.'))
+          else
+            ...badgeHistory.map(
+              (item) => ListTile(
+                title: Text('${item.badgeIcon} ${item.badgeTitle}'),
+                subtitle: Text(item.redeemedAt),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => _BadgeHistoryDetailPage(record: item),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PointHistoryDetailPage extends StatelessWidget {
+  const _PointHistoryDetailPage({
+    required this.record,
+  });
+
+  final PointHistoryRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Point Record Detail')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _DetailRow(label: 'Transaction Type', value: record.transactionType),
+          _DetailRow(label: 'Change', value: '${record.changeAmount}'),
+          _DetailRow(label: 'Related ID', value: record.relatedId ?? '-'),
+          _DetailRow(label: 'Remark', value: record.remark ?? '-'),
+          _DetailRow(label: 'Time', value: record.createdAt),
+        ],
+      ),
+    );
+  }
+}
+
+class _BadgeHistoryDetailPage extends StatelessWidget {
+  const _BadgeHistoryDetailPage({
+    required this.record,
+  });
+
+  final BadgeHistoryRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Badge Record Detail')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _DetailRow(label: 'Badge', value: '${record.badgeIcon} ${record.badgeTitle}'),
+          _DetailRow(label: 'Badge ID', value: record.badgeId),
+          _DetailRow(label: 'Required Points', value: '${record.requiredPoints}'),
+          _DetailRow(label: 'Redeemed At', value: record.redeemedAt),
+        ],
+      ),
+    );
+  }
+}
+
+class _MyPostsListPage extends StatelessWidget {
+  const _MyPostsListPage({
+    required this.posts,
+  });
+
+  final List<ForumPost> posts;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('My Posts')),
+      body: posts.isEmpty
+          ? const Center(child: Text('No posts yet.'))
+          : ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemBuilder: (context, index) {
+                final post = posts[index];
+                return ListTile(
+                  title: Text(post.title),
+                  subtitle: Text('${post.createdAt} | ${post.tag}'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => _MyPostDetailPage(post: post),
+                      ),
+                    );
+                  },
+                );
+              },
+              separatorBuilder: (context, index) => const Divider(height: 1),
+              itemCount: posts.length,
+            ),
+    );
+  }
+}
+
+class _MyPostDetailPage extends StatelessWidget {
+  const _MyPostDetailPage({
+    required this.post,
+  });
+
+  final ForumPost post;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Post Detail')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(post.title, style: textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          _DetailRow(label: 'Author', value: post.author),
+          _DetailRow(label: 'Tag', value: post.tag),
+          _DetailRow(label: 'Created At', value: post.createdAt),
+          _DetailRow(label: 'Likes', value: '${post.likes}'),
+          _DetailRow(label: 'Replies', value: '${post.replies}'),
+          const SizedBox(height: 10),
+          Text(post.content, style: textTheme.bodyLarge),
         ],
       ),
     );
@@ -589,6 +846,34 @@ class _HistoryCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: child,
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(label, style: textTheme.titleSmall),
+          ),
+          Expanded(child: Text(value)),
+        ],
       ),
     );
   }

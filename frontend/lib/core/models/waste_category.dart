@@ -60,12 +60,20 @@ class ClassificationResult {
     required this.category,
     required this.confidence,
     required this.suggestions,
+    required this.identifiedItem,
+    required this.englandCategoryName,
+    required this.ukDisposalBin,
+    required this.ukDisposalTips,
   });
 
   final String itemName;
   final WasteCategory category;
   final double confidence;
   final List<String> suggestions;
+  final String identifiedItem;
+  final String englandCategoryName;
+  final String ukDisposalBin;
+  final List<String> ukDisposalTips;
 
   /// Constructs a [ClassificationResult] from a JSON map received from the backend.
   factory ClassificationResult.fromJson(Map<String, dynamic> json) {
@@ -76,6 +84,17 @@ class ClassificationResult {
       ),
       confidence: (json['confidence'] as num).toDouble(),
       suggestions: (json['suggestions'] as List).cast<String>(),
+      identifiedItem: (json['identifiedItem'] as String?) ?? (json['itemName'] as String),
+      englandCategoryName:
+          (json['englandCategoryName'] as String?) ??
+          (json['ukCategoryName'] as String?) ??
+          ((json['category'] as Map<String, dynamic>)['title'] as String? ?? ''),
+      ukDisposalBin:
+          (json['ukDisposalBin'] as String?) ??
+          ((json['category'] as Map<String, dynamic>)['binColor'] as String? ?? ''),
+      ukDisposalTips:
+          (json['ukDisposalTips'] as List?)?.cast<String>() ??
+          (json['suggestions'] as List).cast<String>(),
     );
   }
 }

@@ -78,12 +78,20 @@ class ClassificationResult {
     required this.category,
     required this.confidence,
     required this.suggestions,
+    required this.identifiedItem,
+    required this.englandCategoryName,
+    required this.ukDisposalBin,
+    required this.ukDisposalTips,
   });
 
   final String itemName;
   final WasteCategory category;
   final double confidence;
   final List<String> suggestions;
+  final String identifiedItem;
+  final String englandCategoryName;
+  final String ukDisposalBin;
+  final List<String> ukDisposalTips;
 
   /// Serialises this classification result to a JSON-compatible map.
   JsonMap toJson() {
@@ -92,6 +100,10 @@ class ClassificationResult {
       'category': category.toJson(),
       'confidence': confidence,
       'suggestions': suggestions,
+      'identifiedItem': identifiedItem,
+      'englandCategoryName': englandCategoryName,
+      'ukDisposalBin': ukDisposalBin,
+      'ukDisposalTips': ukDisposalTips,
     };
   }
 }

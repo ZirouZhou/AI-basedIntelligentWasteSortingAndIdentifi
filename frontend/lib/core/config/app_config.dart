@@ -19,7 +19,7 @@ class AppConfig {
   /// Change this to your server's actual IP or domain in production.
   static const baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8080',
+    defaultValue: 'http://192.168.124.12:8080',
   );
 
   /// HTTP request timeout [Duration] used by [ApiClient].

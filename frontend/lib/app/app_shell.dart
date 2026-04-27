@@ -42,17 +42,49 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   /// Index of the currently selected navigation destination.
   int _selectedIndex = 0;
+  final ValueNotifier<int> _profileDataRefreshSignal =
+      ValueNotifier<int>(0);
+
+  @override
+  void dispose() {
+    _profileDataRefreshSignal.dispose();
+    super.dispose();
+  }
+
+  void _notifyProfileDataRefresh() {
+    _profileDataRefreshSignal.value++;
+  }
+
+  void _selectTab(int index) {
+    if (index < 0 || index > 5) {
+      return;
+    }
+    setState(() => _selectedIndex = index);
+  }
 
   /// The six top-level pages, built once and kept alive by [IndexedStack].
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      HomePage(userId: widget.userId),
-      ClassifyPage(userId: widget.userId),
-      RewardsPage(userId: widget.userId),
+      HomePage(
+        userId: widget.userId,
+        onNavigateToTab: _selectTab,
+        profileDataRefreshSignal: _profileDataRefreshSignal,
+      ),
+      ClassifyPage(
+        userId: widget.userId,
+        onClassificationSuccess: _notifyProfileDataRefresh,
+      ),
+      RewardsPage(
+        userId: widget.userId,
+        onPointsUpdated: _notifyProfileDataRefresh,
+      ),
       CommunityPage(userId: widget.userId),
       MessagesPage(userId: widget.userId),
-      ProfilePage(userId: widget.userId),
+      ProfilePage(
+        userId: widget.userId,
+        profileDataRefreshSignal: _profileDataRefreshSignal,
+      ),
     ];
 
     return Scaffold(
@@ -66,9 +98,7 @@ class _AppShellState extends State<AppShell> {
       // Material 3 bottom navigation bar.
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() => _selectedIndex = index);
-        },
+        onDestinationSelected: _selectTab,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../core/models/forum_post.dart';
 import '../../core/services/api_client.dart';
@@ -29,7 +29,6 @@ class _CommunityPageState extends State<CommunityPage> {
   ];
 
   List<ForumPost> _posts = const [];
-  final Map<String, List<ForumComment>> _commentsByPost = {};
   bool _loading = true;
   String? _error;
 
@@ -70,30 +69,6 @@ class _CommunityPageState extends State<CommunityPage> {
       if (mounted) {
         setState(() => _loading = false);
       }
-    }
-  }
-
-  Future<void> _toggleLike(ForumPost post) async {
-    try {
-      final updated = await _apiClient.toggleForumPostLike(
-        postId: post.id,
-        userId: widget.userId,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _posts = _posts
-            .map((item) => item.id == post.id ? updated : item)
-            .toList(growable: false);
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to like this post.')),
-      );
     }
   }
 
@@ -261,80 +236,17 @@ class _CommunityPageState extends State<CommunityPage> {
     }
   }
 
-  Future<void> _openComments(ForumPost post) async {
-    await _loadComments(post.id);
-    if (!mounted) {
-      return;
-    }
-    final messenger = ScaffoldMessenger.of(context);
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        return _CommentSheet(
+  Future<void> _openPostDetail(ForumPost post) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _ForumPostDetailPage(
+          apiClient: _apiClient,
+          currentUserId: widget.userId,
           post: post,
-          comments: _commentsByPost[post.id] ?? const [],
-          onSubmit: (content, parentCommentId) async {
-            try {
-              await _apiClient.createForumComment(
-                postId: post.id,
-                authorId: widget.userId,
-                content: content,
-                parentCommentId: parentCommentId,
-              );
-              await _loadComments(post.id);
-              await _loadPosts();
-            } catch (_) {
-              if (!mounted) {
-                return;
-              }
-              messenger.showSnackBar(
-                const SnackBar(content: Text('Failed to submit comment.')),
-              );
-            }
-          },
-          onLike: (commentId) async {
-            try {
-              await _apiClient.toggleForumCommentLike(
-                commentId: commentId,
-                userId: widget.userId,
-              );
-              await _loadComments(post.id);
-            } catch (_) {
-              if (!mounted) {
-                return;
-              }
-              messenger.showSnackBar(
-                const SnackBar(content: Text('Failed to like comment.')),
-              );
-            }
-          },
-        );
-      },
+          onChanged: _loadPosts,
+        ),
+      ),
     );
-  }
-
-  Future<void> _loadComments(String postId) async {
-    try {
-      final comments = await _apiClient.fetchForumComments(
-        postId: postId,
-        userId: widget.userId,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _commentsByPost[postId] = comments;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _commentsByPost[postId] = const [];
-      });
-    }
   }
 
   @override
@@ -378,10 +290,12 @@ class _CommunityPageState extends State<CommunityPage> {
           ],
           const SizedBox(height: 20),
           if (_loading)
-            const Center(child: Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(),
-            ))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ),
+            )
           else if (_posts.isEmpty)
             const Center(
               child: Padding(
@@ -393,68 +307,207 @@ class _CommunityPageState extends State<CommunityPage> {
             ..._posts.map(
               (post) => Card(
                 margin: const EdgeInsets.only(bottom: 14),
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          InkWell(
-                            borderRadius: BorderRadius.circular(999),
-                            onTap: () => _openChatByAvatar(post),
-                            child: const CircleAvatar(
-                              backgroundColor: AppTheme.sky,
-                              child: Icon(Icons.person, color: AppTheme.seed),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(post.author, style: textTheme.titleMedium),
-                                Text(post.createdAt, style: textTheme.bodyMedium),
-                                Text(
-                                  'Tap avatar to chat',
-                                  style: textTheme.bodySmall?.copyWith(
-                                    color: AppTheme.seed,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Chip(label: Text(post.tag)),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(post.title, style: textTheme.titleLarge),
-                      const SizedBox(height: 8),
-                      Text(post.content),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => _toggleLike(post),
-                            icon: Icon(
-                              post.likedByMe ? Icons.favorite : Icons.favorite_border,
-                              color: post.likedByMe ? Colors.red : null,
-                            ),
-                            tooltip: 'Like',
-                          ),
-                          Text('${post.likes} likes'),
-                          const SizedBox(width: 10),
-                          IconButton(
-                            onPressed: () => _openComments(post),
-                            icon: const Icon(Icons.chat_bubble_outline),
-                            tooltip: 'Comments',
-                          ),
-                          Text('${post.replies} replies'),
-                        ],
-                      ),
-                    ],
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(14),
+                  onTap: () => _openPostDetail(post),
+                  leading: InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: () => _openChatByAvatar(post),
+                    child: const CircleAvatar(
+                      backgroundColor: AppTheme.sky,
+                      child: Icon(Icons.person, color: AppTheme.seed),
+                    ),
                   ),
+                  title: Text(post.title),
+                  subtitle: Text('${post.author} · ${post.createdAt} · ${post.tag}'),
+                  trailing: const Icon(Icons.chevron_right),
                 ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ForumPostDetailPage extends StatefulWidget {
+  const _ForumPostDetailPage({
+    required this.apiClient,
+    required this.currentUserId,
+    required this.post,
+    required this.onChanged,
+  });
+
+  final ApiClient apiClient;
+  final String currentUserId;
+  final ForumPost post;
+  final Future<void> Function() onChanged;
+
+  @override
+  State<_ForumPostDetailPage> createState() => _ForumPostDetailPageState();
+}
+
+class _ForumPostDetailPageState extends State<_ForumPostDetailPage> {
+  late ForumPost _post;
+  List<ForumComment> _comments = const [];
+  bool _loadingComments = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _post = widget.post;
+    _loadComments();
+  }
+
+  Future<void> _loadComments() async {
+    setState(() => _loadingComments = true);
+    try {
+      final comments = await widget.apiClient.fetchForumComments(
+        postId: _post.id,
+        userId: widget.currentUserId,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() => _comments = comments);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _comments = const []);
+    } finally {
+      if (mounted) {
+        setState(() => _loadingComments = false);
+      }
+    }
+  }
+
+  Future<void> _toggleLike() async {
+    try {
+      final updated = await widget.apiClient.toggleForumPostLike(
+        postId: _post.id,
+        userId: widget.currentUserId,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() => _post = updated);
+      await widget.onChanged();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to like this post.')),
+      );
+    }
+  }
+
+  Future<void> _openCommentsEditor() async {
+    final messenger = ScaffoldMessenger.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return _CommentSheet(
+          post: _post,
+          comments: _comments,
+          onSubmit: (content, parentCommentId) async {
+            try {
+              await widget.apiClient.createForumComment(
+                postId: _post.id,
+                authorId: widget.currentUserId,
+                content: content,
+                parentCommentId: parentCommentId,
+              );
+              await _loadComments();
+              await widget.onChanged();
+            } catch (_) {
+              if (!mounted) {
+                return;
+              }
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Failed to submit comment.')),
+              );
+            }
+          },
+          onLike: (commentId) async {
+            try {
+              await widget.apiClient.toggleForumCommentLike(
+                commentId: commentId,
+                userId: widget.currentUserId,
+              );
+              await _loadComments();
+            } catch (_) {
+              if (!mounted) {
+                return;
+              }
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Failed to like comment.')),
+              );
+            }
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Post Detail')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(_post.title, style: textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          Text('${_post.author} · ${_post.createdAt} · ${_post.tag}'),
+          const SizedBox(height: 12),
+          Text(_post.content, style: textTheme.bodyLarge),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              IconButton(
+                onPressed: _toggleLike,
+                icon: Icon(
+                  _post.likedByMe ? Icons.favorite : Icons.favorite_border,
+                  color: _post.likedByMe ? Colors.red : null,
+                ),
+              ),
+              Text('${_post.likes} likes'),
+              const SizedBox(width: 10),
+              IconButton(
+                onPressed: _openCommentsEditor,
+                icon: const Icon(Icons.chat_bubble_outline),
+              ),
+              Text('${_post.replies} replies'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text('Comments', style: textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (_loadingComments)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: CircularProgressIndicator(),
+            )
+          else if (_comments.isEmpty)
+            const Text('No comments yet.')
+          else
+            ..._comments.map(
+              (comment) => _CommentNode(
+                comment: comment,
+                level: 0,
+                onReply: (_, __) => _openCommentsEditor(),
+                onLike: (commentId) async {
+                  await widget.apiClient.toggleForumCommentLike(
+                    commentId: commentId,
+                    userId: widget.currentUserId,
+                  );
+                  await _loadComments();
+                },
               ),
             ),
         ],

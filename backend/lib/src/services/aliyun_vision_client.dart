@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -74,13 +74,81 @@ class AliyunVisionClient {
         'RegionId': _config.regionId,
       },
     );
+    final upload = _parseAuthorizeUpload(auth);
+    final uploadUri = Uri.parse('https://${upload.bucket}.${upload.endpoint}/');
 
-    final accessKeyId = (auth['AccessKeyId'] ?? '').toString();
-    final bucket = (auth['Bucket'] ?? '').toString();
-    final endpoint = (auth['Endpoint'] ?? '').toString();
-    final objectKey = (auth['ObjectKey'] ?? '').toString();
-    final encodedPolicy = (auth['EncodedPolicy'] ?? '').toString();
-    final signature = (auth['Signature'] ?? '').toString();
+    final classicFields = <String, String>{
+      'OSSAccessKeyId': upload.accessKeyId,
+      'policy': upload.encodedPolicy,
+      'Signature': upload.signature,
+      'key': upload.objectKey,
+      'success_action_status': '200',
+      if (upload.securityToken.isNotEmpty)
+        'x-oss-security-token': upload.securityToken,
+    };
+
+    final modernFields = <String, String>{
+      'x-oss-access-key-id': upload.accessKeyId,
+      'policy': upload.encodedPolicy,
+      'signature': upload.signature,
+      'key': upload.objectKey,
+      'success_action_status': '200',
+      if (upload.securityToken.isNotEmpty)
+        'x-oss-security-token': upload.securityToken,
+    };
+
+    final classicAttempt = await _uploadToOss(
+      uploadUri: uploadUri,
+      fields: classicFields,
+      imageBytes: imageBytes,
+      fileName: fileName,
+    );
+    if (classicAttempt.ok) {
+      return 'https://${upload.bucket}.${upload.endpoint}/${upload.objectKey}';
+    }
+
+    final modernAttempt = await _uploadToOss(
+      uploadUri: uploadUri,
+      fields: modernFields,
+      imageBytes: imageBytes,
+      fileName: fileName,
+    );
+    if (modernAttempt.ok) {
+      return 'https://${upload.bucket}.${upload.endpoint}/${upload.objectKey}';
+    }
+
+    throw StateError(
+      'OSS upload failed. '
+      'classic=${classicAttempt.statusCode}:${classicAttempt.body} '
+      'modern=${modernAttempt.statusCode}:${modernAttempt.body}',
+    );
+  }
+
+  _AuthorizeUploadResult _parseAuthorizeUpload(Map<String, dynamic> auth) {
+    Map<String, dynamic> data = const {};
+    final rawData = auth['Data'];
+    if (rawData is Map) {
+      data = rawData.cast<String, dynamic>();
+    }
+
+    String pick(List<String> keys) {
+      for (final key in keys) {
+        final value = auth[key] ?? data[key];
+        final text = value?.toString().trim() ?? '';
+        if (text.isNotEmpty) {
+          return text;
+        }
+      }
+      return '';
+    }
+
+    final accessKeyId = pick(['AccessKeyId', 'OSSAccessKeyId']);
+    final securityToken = pick(['SecurityToken', 'StsToken', 'Token']);
+    final bucket = pick(['Bucket', 'OssBucket']);
+    final endpoint = pick(['Endpoint', 'OssEndpoint']);
+    final objectKey = pick(['ObjectKey', 'Key']);
+    final encodedPolicy = pick(['EncodedPolicy', 'Policy', 'policy']);
+    final signature = pick(['Signature', 'signature']);
 
     if (accessKeyId.isEmpty ||
         bucket.isEmpty ||
@@ -88,33 +156,99 @@ class AliyunVisionClient {
         objectKey.isEmpty ||
         encodedPolicy.isEmpty ||
         signature.isEmpty) {
-      throw StateError('AuthorizeFileUpload returned incomplete fields.');
-    }
-
-    final uploadUri = Uri.parse('http://$bucket.$endpoint/');
-    final request = http.MultipartRequest('POST', uploadUri)
-      ..fields['OSSAccessKeyId'] = accessKeyId
-      ..fields['policy'] = encodedPolicy
-      ..fields['Signature'] = signature
-      ..fields['key'] = objectKey
-      ..fields['success_action_status'] = '201'
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          imageBytes,
-          filename: _safeFileName(fileName),
-        ),
-      );
-
-    final streamed = await _http.send(request);
-    if (streamed.statusCode != 201 && streamed.statusCode != 204) {
-      final body = await streamed.stream.bytesToString();
+      final topKeys = auth.keys.toList(growable: false)..sort();
+      final dataKeys = data.keys.toList(growable: false)..sort();
       throw StateError(
-        'OSS upload failed with status ${streamed.statusCode}: $body',
+        'AuthorizeFileUpload returned incomplete fields. '
+        'topKeys=$topKeys dataKeys=$dataKeys',
       );
     }
 
-    return 'http://$bucket.$endpoint/$objectKey';
+    return _AuthorizeUploadResult(
+      accessKeyId: accessKeyId,
+      securityToken: securityToken,
+      bucket: bucket,
+      endpoint: endpoint,
+      objectKey: objectKey,
+      encodedPolicy: encodedPolicy,
+      signature: signature,
+    );
+  }
+
+  Future<_UploadAttempt> _uploadToOss({
+    required Uri uploadUri,
+    required Map<String, String> fields,
+    required Uint8List imageBytes,
+    required String fileName,
+  }) async {
+    final boundary = '----EcoSortBoundary${_nonce()}';
+    final bytes = _buildMultipartBody(
+      boundary: boundary,
+      fields: fields,
+      imageBytes: imageBytes,
+      fileName: _safeFileName(fileName),
+    );
+
+    final response = await _http.post(
+      uploadUri,
+      headers: {
+        'Content-Type': 'multipart/form-data; boundary=$boundary',
+        'Content-Length': bytes.length.toString(),
+      },
+      body: bytes,
+    );
+    final body = response.body;
+    final ok =
+        response.statusCode == 200 ||
+        response.statusCode == 201 ||
+        response.statusCode == 204;
+    return _UploadAttempt(
+      ok: ok,
+      statusCode: response.statusCode,
+      body: body,
+    );
+  }
+
+  List<int> _buildMultipartBody({
+    required String boundary,
+    required Map<String, String> fields,
+    required Uint8List imageBytes,
+    required String fileName,
+  }) {
+    final builder = BytesBuilder();
+    void writeText(String value) => builder.add(utf8.encode(value));
+
+    for (final entry in fields.entries) {
+      writeText('--$boundary\r\n');
+      writeText('Content-Disposition: form-data; name="${entry.key}"\r\n\r\n');
+      writeText('${entry.value}\r\n');
+    }
+
+    final contentType = _guessContentType(fileName);
+    writeText('--$boundary\r\n');
+    writeText(
+      'Content-Disposition: form-data; name="file"; filename="$fileName"\r\n',
+    );
+    writeText('Content-Type: $contentType\r\n\r\n');
+    builder.add(imageBytes);
+    writeText('\r\n');
+    writeText('--$boundary--\r\n');
+
+    return builder.takeBytes();
+  }
+
+  String _guessContentType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.png')) {
+      return 'image/png';
+    }
+    if (lower.endsWith('.webp')) {
+      return 'image/webp';
+    }
+    if (lower.endsWith('.bmp')) {
+      return 'image/bmp';
+    }
+    return 'image/jpeg';
   }
 
   Future<Map<String, dynamic>> _callRpc({
@@ -135,19 +269,52 @@ class AliyunVisionClient {
       ...extraParams,
     };
 
-    final signature = _sign(params);
-    final allParams = <String, String>{
-      ...params,
-      'Signature': signature,
-    };
+    try {
+      return await _callRpcWithMethod(
+        endpoint: endpoint,
+        method: 'POST',
+        params: params,
+      );
+    } on _AliyunApiError catch (error) {
+      // Some Aliyun RPC gateways only allow GET for specific actions.
+      if (error.code == 'UnsupportedHTTPMethod') {
+        return _callRpcWithMethod(
+          endpoint: endpoint,
+          method: 'GET',
+          params: params,
+        );
+      }
+      throw StateError('Aliyun API error [${error.code}]: ${error.message}');
+    }
+  }
 
-    final response = await _http.post(
-      Uri.https(endpoint, '/'),
-      headers: const {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: _formEncode(allParams),
-    );
+  Future<Map<String, dynamic>> _callRpcWithMethod({
+    required String endpoint,
+    required String method,
+    required Map<String, String> params,
+  }) async {
+    final upperMethod = method.toUpperCase();
+    final signature = _sign(params, method: upperMethod);
+    final allParams = <String, String>{...params, 'Signature': signature};
+
+    late final http.Response response;
+    if (upperMethod == 'GET') {
+      final uri = Uri.parse('https://$endpoint/?${_formEncode(allParams)}');
+      response = await _http.get(
+        uri,
+        headers: const {'Accept': 'application/json'},
+      );
+    } else if (upperMethod == 'POST') {
+      response = await _http.post(
+        Uri.https(endpoint, '/'),
+        headers: const {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: _formEncode(allParams),
+      );
+    } else {
+      throw StateError('Unsupported RPC method: $upperMethod');
+    }
 
     final responseBody = response.body;
     final decoded = jsonDecode(responseBody);
@@ -158,15 +325,16 @@ class AliyunVisionClient {
     if (decoded.containsKey('Code') || response.statusCode >= 400) {
       final code = (decoded['Code'] ?? response.statusCode).toString();
       final message = (decoded['Message'] ?? 'Unknown error').toString();
-      throw StateError('Aliyun API error [$code]: $message');
+      throw _AliyunApiError(code: code, message: message);
     }
 
     return decoded;
   }
 
-  String _sign(Map<String, String> params) {
+  String _sign(Map<String, String> params, {required String method}) {
     final canonical = _canonicalQuery(params);
-    final stringToSign = 'POST&%2F&${_percentEncode(canonical)}';
+    final stringToSign =
+        '${method.toUpperCase()}&%2F&${_percentEncode(canonical)}';
     final key = utf8.encode('${_config.accessKeySecret}&');
     final digest = Hmac(sha1, key).convert(utf8.encode(stringToSign));
     return base64Encode(digest.bytes);
@@ -217,4 +385,46 @@ class AliyunVisionClient {
     }
     return trimmed.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
   }
+}
+
+class _AliyunApiError implements Exception {
+  const _AliyunApiError({
+    required this.code,
+    required this.message,
+  });
+
+  final String code;
+  final String message;
+}
+
+class _AuthorizeUploadResult {
+  const _AuthorizeUploadResult({
+    required this.accessKeyId,
+    required this.securityToken,
+    required this.bucket,
+    required this.endpoint,
+    required this.objectKey,
+    required this.encodedPolicy,
+    required this.signature,
+  });
+
+  final String accessKeyId;
+  final String securityToken;
+  final String bucket;
+  final String endpoint;
+  final String objectKey;
+  final String encodedPolicy;
+  final String signature;
+}
+
+class _UploadAttempt {
+  const _UploadAttempt({
+    required this.ok,
+    required this.statusCode,
+    required this.body,
+  });
+
+  final bool ok;
+  final int statusCode;
+  final String body;
 }
