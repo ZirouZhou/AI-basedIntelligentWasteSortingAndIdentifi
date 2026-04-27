@@ -33,6 +33,7 @@ function Invoke-Api {
   }
 
   $curlHeaders = @()
+  $payloadTemp = $null
   foreach ($key in $headers.Keys) {
     $curlHeaders += "-H"
     $curlHeaders += "${key}: $($headers[$key])"
@@ -45,7 +46,9 @@ function Invoke-Api {
   $args += $curlHeaders
   if ($null -ne $Body) {
     $payload = $Body | ConvertTo-Json -Depth 20 -Compress
-    $args += @("-H", "Content-Type: application/json", "--data-raw", $payload)
+    $payloadTemp = Join-Path $env:TEMP ("e2e_payload_" + [guid]::NewGuid().ToString("N") + ".json")
+    Set-Content -Path $payloadTemp -Value $payload -Encoding UTF8
+    $args += @("-H", "Content-Type: application/json", "--data-binary", "@$payloadTemp")
   }
   $args += $uri
 
@@ -62,6 +65,9 @@ function Invoke-Api {
   }
   Remove-Item -Path $tempOut -ErrorAction SilentlyContinue
   Remove-Item -Path $tempErr -ErrorAction SilentlyContinue
+  if ($null -ne $payloadTemp) {
+    Remove-Item -Path $payloadTemp -ErrorAction SilentlyContinue
+  }
 
   if ($curlExitCode -ne 0) {
     throw "Request failed for ${Method} ${uri}: curl exit $curlExitCode. $curlErr"
