@@ -268,6 +268,11 @@ http://localhost:8080
 | `GET` | `/eco-actions` | List eco-friendly actions | `[{ id, title, impact, points, completed }]` |
 | `GET` | `/rewards` | List available rewards | `[{ id, title, description, requiredPoints, redeemed }]` |
 | `GET` | `/forum-posts` | List community forum posts | `[{ id, author, title, content, tag, likes, replies, createdAt }]` |
+| `POST` | `/forum-posts` | Create a new forum post | `{ id, ... }` |
+| `POST` | `/forum-posts/:postId/like` | Toggle like for one post | `{ id, ... , likedByMe }` |
+| `GET` | `/forum-posts/:postId/comments?userId=u1` | List nested comments of one post | `[{ id, content, replies: [...] }]` |
+| `POST` | `/forum-posts/:postId/comments` | Create comment/reply | `{ id, postId, parentCommentId, ... }` |
+| `POST` | `/forum-comments/:commentId/like` | Toggle like for one comment | `{ id, likes, likedByMe, ... }` |
 | `GET` | `/messages` | List user message threads | `[{ id, sender, preview, updatedAt, unread }]` |
 | `GET` | `/profile` | Get current user profile | `{ id, name, email, city, level, greenScore, totalRecycledKg, avatarInitials }` |
 
@@ -365,6 +370,35 @@ CREATE TABLE IF NOT EXISTS vision_classification_logs (
   raw_response_json LONGTEXT NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_vision_logs_created (created_at DESC)
+);
+```
+
+Forum/community module uses these additional tables:
+
+```sql
+CREATE TABLE IF NOT EXISTS forum_post_likes (
+  post_id VARCHAR(32) NOT NULL,
+  user_id VARCHAR(32) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS forum_comments (
+  id VARCHAR(40) PRIMARY KEY,
+  post_id VARCHAR(32) NOT NULL,
+  parent_comment_id VARCHAR(40) NULL,
+  author_id VARCHAR(32) NULL,
+  author VARCHAR(128) NOT NULL,
+  content TEXT NOT NULL,
+  likes INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS forum_comment_likes (
+  comment_id VARCHAR(40) NOT NULL,
+  user_id VARCHAR(32) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (comment_id, user_id)
 );
 ```
 

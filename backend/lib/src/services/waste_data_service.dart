@@ -13,7 +13,69 @@ abstract class WasteDataService {
 
   Future<List<ForumPost>> getForumPosts();
 
+  Future<ForumPost> createForumPost({
+    required String authorId,
+    required String title,
+    required String content,
+    required String tag,
+  });
+
+  Future<ForumPost> toggleForumPostLike({
+    required String postId,
+    required String userId,
+  });
+
+  Future<List<ForumComment>> getForumComments({
+    required String postId,
+    String? userId,
+  });
+
+  Future<ForumComment> createForumComment({
+    required String postId,
+    required String authorId,
+    required String content,
+    String? parentCommentId,
+  });
+
+  Future<ForumComment> toggleForumCommentLike({
+    required String commentId,
+    required String userId,
+  });
+
   Future<List<MessageThread>> getMessages();
+
+  Future<List<ChatConversationSummary>> getChatConversations({
+    required String userId,
+  });
+
+  Future<String> getOrCreateDirectConversation({
+    required String userId,
+    required String peerUserId,
+  });
+
+  Future<List<ChatMessage>> getChatMessages({
+    required String userId,
+    required String conversationId,
+    int? afterMessageId,
+    int limit = 50,
+  });
+
+  Future<ChatMessage> sendChatTextMessage({
+    required String userId,
+    required String conversationId,
+    required String content,
+  });
+
+  Future<ChatMessage> sendChatImageMessage({
+    required String userId,
+    required String conversationId,
+    required String imageUrl,
+  });
+
+  Future<void> markConversationRead({
+    required String userId,
+    required String conversationId,
+  });
 
   Future<AppUser> getProfile();
 

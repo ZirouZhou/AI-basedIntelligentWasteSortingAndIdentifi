@@ -189,6 +189,7 @@ class Reward {
 class ForumPost {
   const ForumPost({
     required this.id,
+    this.authorId = 'u1',
     required this.author,
     required this.title,
     required this.content,
@@ -196,9 +197,11 @@ class ForumPost {
     required this.likes,
     required this.replies,
     required this.createdAt,
+    this.likedByMe = false,
   });
 
   final String id;
+  final String authorId;
   final String author;
   final String title;
   final String content;
@@ -206,11 +209,13 @@ class ForumPost {
   final int likes;
   final int replies;
   final String createdAt;
+  final bool likedByMe;
 
   /// Serialises this forum post to a JSON-compatible map.
   JsonMap toJson() {
     return {
       'id': id,
+      'authorId': authorId,
       'author': author,
       'title': title,
       'content': content,
@@ -218,6 +223,53 @@ class ForumPost {
       'likes': likes,
       'replies': replies,
       'createdAt': createdAt,
+      'likedByMe': likedByMe,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// ForumComment
+// ------------------------------------------------------------------------------------------------
+
+/// A comment in the community forum. Supports nested replies.
+class ForumComment {
+  const ForumComment({
+    required this.id,
+    required this.postId,
+    this.parentCommentId,
+    required this.authorId,
+    required this.author,
+    required this.content,
+    required this.likes,
+    required this.createdAt,
+    this.likedByMe = false,
+    this.replies = const [],
+  });
+
+  final String id;
+  final String postId;
+  final String? parentCommentId;
+  final String authorId;
+  final String author;
+  final String content;
+  final int likes;
+  final String createdAt;
+  final bool likedByMe;
+  final List<ForumComment> replies;
+
+  JsonMap toJson() {
+    return {
+      'id': id,
+      'postId': postId,
+      'parentCommentId': parentCommentId,
+      'authorId': authorId,
+      'author': author,
+      'content': content,
+      'likes': likes,
+      'createdAt': createdAt,
+      'likedByMe': likedByMe,
+      'replies': replies.map((item) => item.toJson()).toList(growable: false),
     };
   }
 }
@@ -256,6 +308,86 @@ class MessageThread {
       'preview': preview,
       'updatedAt': updatedAt,
       'unread': unread,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// ChatConversationSummary
+// ------------------------------------------------------------------------------------------------
+
+/// A direct chat conversation summary for one user.
+class ChatConversationSummary {
+  const ChatConversationSummary({
+    required this.id,
+    required this.peerUserId,
+    required this.peerName,
+    required this.peerAvatarInitials,
+    required this.preview,
+    required this.updatedAt,
+    required this.unreadCount,
+    required this.latestMessageType,
+  });
+
+  final String id;
+  final String peerUserId;
+  final String peerName;
+  final String peerAvatarInitials;
+  final String preview;
+  final String updatedAt;
+  final int unreadCount;
+  final String latestMessageType;
+
+  JsonMap toJson() {
+    return {
+      'id': id,
+      'peerUserId': peerUserId,
+      'peerName': peerName,
+      'peerAvatarInitials': peerAvatarInitials,
+      'preview': preview,
+      'updatedAt': updatedAt,
+      'unreadCount': unreadCount,
+      'latestMessageType': latestMessageType,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// ChatMessage
+// ------------------------------------------------------------------------------------------------
+
+/// One chat message in a conversation.
+class ChatMessage {
+  const ChatMessage({
+    required this.id,
+    required this.conversationId,
+    required this.senderId,
+    required this.senderName,
+    required this.senderAvatarInitials,
+    required this.messageType,
+    required this.content,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String conversationId;
+  final String senderId;
+  final String senderName;
+  final String senderAvatarInitials;
+  final String messageType;
+  final String content;
+  final String createdAt;
+
+  JsonMap toJson() {
+    return {
+      'id': id,
+      'conversationId': conversationId,
+      'senderId': senderId,
+      'senderName': senderName,
+      'senderAvatarInitials': senderAvatarInitials,
+      'messageType': messageType,
+      'content': content,
+      'createdAt': createdAt,
     };
   }
 }

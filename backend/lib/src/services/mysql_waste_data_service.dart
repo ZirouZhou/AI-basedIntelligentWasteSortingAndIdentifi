@@ -94,6 +94,7 @@ class MySqlWasteDataService implements WasteDataService {
     await _connection.query('''
       CREATE TABLE IF NOT EXISTS forum_posts (
         id VARCHAR(32) PRIMARY KEY,
+        author_id VARCHAR(32) NULL,
         author VARCHAR(128) NOT NULL,
         title VARCHAR(255) NOT NULL,
         content TEXT NOT NULL,
@@ -101,6 +102,53 @@ class MySqlWasteDataService implements WasteDataService {
         likes INT NOT NULL,
         replies INT NOT NULL,
         created_at VARCHAR(64) NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS forum_post_likes (
+        post_id VARCHAR(32) NOT NULL,
+        user_id VARCHAR(32) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (post_id, user_id),
+        INDEX idx_forum_post_likes_user (user_id),
+        CONSTRAINT fk_forum_post_likes_post
+          FOREIGN KEY (post_id) REFERENCES forum_posts(id)
+          ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS forum_comments (
+        id VARCHAR(40) PRIMARY KEY,
+        post_id VARCHAR(32) NOT NULL,
+        parent_comment_id VARCHAR(40) NULL,
+        author_id VARCHAR(32) NULL,
+        author VARCHAR(128) NOT NULL,
+        content TEXT NOT NULL,
+        likes INT NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_forum_comments_post_time (post_id, created_at DESC),
+        INDEX idx_forum_comments_parent (parent_comment_id),
+        CONSTRAINT fk_forum_comments_post
+          FOREIGN KEY (post_id) REFERENCES forum_posts(id)
+          ON DELETE CASCADE,
+        CONSTRAINT fk_forum_comments_parent
+          FOREIGN KEY (parent_comment_id) REFERENCES forum_comments(id)
+          ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS forum_comment_likes (
+        comment_id VARCHAR(40) NOT NULL,
+        user_id VARCHAR(32) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (comment_id, user_id),
+        INDEX idx_forum_comment_likes_user (user_id),
+        CONSTRAINT fk_forum_comment_likes_comment
+          FOREIGN KEY (comment_id) REFERENCES forum_comments(id)
+          ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
     ''');
 
@@ -125,6 +173,51 @@ class MySqlWasteDataService implements WasteDataService {
         total_recycled_kg DOUBLE NOT NULL,
         avatar_initials VARCHAR(16) NOT NULL,
         total_co2_reduction_kg DOUBLE NOT NULL DEFAULT 0
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS chat_conversations (
+        id VARCHAR(64) PRIMARY KEY,
+        conversation_type VARCHAR(16) NOT NULL DEFAULT 'direct',
+        latest_message_id BIGINT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_chat_conversations_updated (updated_at DESC)
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS chat_conversation_participants (
+        conversation_id VARCHAR(64) NOT NULL,
+        user_id VARCHAR(32) NOT NULL,
+        joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_read_message_id BIGINT NULL,
+        last_read_at DATETIME NULL,
+        PRIMARY KEY (conversation_id, user_id),
+        INDEX idx_chat_participants_user (user_id),
+        CONSTRAINT fk_chat_participants_conversation
+          FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id)
+          ON DELETE CASCADE,
+        CONSTRAINT fk_chat_participants_user
+          FOREIGN KEY (user_id) REFERENCES app_users(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        conversation_id VARCHAR(64) NOT NULL,
+        sender_id VARCHAR(32) NOT NULL,
+        message_type VARCHAR(16) NOT NULL,
+        content MEDIUMTEXT NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_chat_messages_conversation_id (conversation_id, id),
+        CONSTRAINT fk_chat_messages_conversation
+          FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id)
+          ON DELETE CASCADE,
+        CONSTRAINT fk_chat_messages_sender
+          FOREIGN KEY (sender_id) REFERENCES app_users(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
     ''');
 
@@ -238,6 +331,54 @@ class MySqlWasteDataService implements WasteDataService {
       column: 'active',
       ddl: 'ALTER TABLE badges ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1',
     );
+
+    await _addColumnIfMissing(
+      table: 'forum_posts',
+      column: 'author_id',
+      ddl: 'ALTER TABLE forum_posts ADD COLUMN author_id VARCHAR(32) NULL',
+    );
+
+    await _backfillForumAuthorIds();
+    await _upgradeChatMessageContentTypeIfNeeded();
+  }
+
+  Future<void> _backfillForumAuthorIds() async {
+    await _connection.query(
+      '''
+      UPDATE forum_posts
+      SET author_id = CASE author
+        WHEN 'Mia Chen' THEN 'u2'
+        WHEN 'Leo Wang' THEN 'u3'
+        WHEN 'Ava Smith' THEN 'u4'
+        ELSE author_id
+      END
+      WHERE author IN ('Mia Chen', 'Leo Wang', 'Ava Smith')
+        AND (author_id IS NULL OR author_id = '' OR author_id = 'u1')
+      ''',
+    );
+  }
+
+  Future<void> _upgradeChatMessageContentTypeIfNeeded() async {
+    final typeResult = await _connection.query(
+      '''
+      SELECT DATA_TYPE
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ?
+        AND TABLE_NAME = 'chat_messages'
+        AND COLUMN_NAME = 'content'
+      LIMIT 1
+      ''',
+      [_config.database],
+    );
+    if (typeResult.isEmpty) {
+      return;
+    }
+    final dataType = _readText(typeResult.first[0]).toLowerCase();
+    if (dataType == 'text') {
+      await _connection.query(
+        'ALTER TABLE chat_messages MODIFY content MEDIUMTEXT NOT NULL',
+      );
+    }
   }
 
   Future<void> _addColumnIfMissing({
@@ -275,6 +416,8 @@ class MySqlWasteDataService implements WasteDataService {
     await _seedForumPostsIfNeeded();
     await _seedMessagesIfNeeded();
     await _seedProfileIfNeeded();
+    await _seedAdditionalUsersIfNeeded();
+    await _seedChatIfNeeded();
     await _seedEcoActionCatalogIfNeeded();
     await _seedBadgesIfNeeded();
   }
@@ -452,6 +595,7 @@ class MySqlWasteDataService implements WasteDataService {
     const data = [
       ForumPost(
         id: 'p1',
+        authorId: 'u2',
         author: 'Mia Chen',
         title: 'How do you sort takeaway boxes?',
         content: 'I rinse clean paper boxes, but oily ones still confuse me.',
@@ -462,6 +606,7 @@ class MySqlWasteDataService implements WasteDataService {
       ),
       ForumPost(
         id: 'p2',
+        authorId: 'u3',
         author: 'Leo Wang',
         title: 'Weekend river cleanup team',
         content: 'We are forming a small group near the east gate this Saturday.',
@@ -472,6 +617,7 @@ class MySqlWasteDataService implements WasteDataService {
       ),
       ForumPost(
         id: 'p3',
+        authorId: 'u4',
         author: 'Ava Smith',
         title: 'Battery collection point updated',
         content:
@@ -487,11 +633,12 @@ class MySqlWasteDataService implements WasteDataService {
       await _connection.query(
         '''
         INSERT INTO forum_posts (
-          id, author, title, content, tag, likes, replies, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          id, author_id, author, title, content, tag, likes, replies, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
         [
           item.id,
+          item.authorId,
           item.author,
           item.title,
           item.content,
@@ -588,6 +735,212 @@ class MySqlWasteDataService implements WasteDataService {
         user.avatarInitials,
         user.totalCo2ReductionKg,
       ],
+    );
+  }
+
+  Future<void> _seedAdditionalUsersIfNeeded() async {
+    const users = [
+      AppUser(
+        id: 'u2',
+        name: 'Mia Chen',
+        email: 'mia.chen@example.com',
+        city: 'Shanghai',
+        level: 'Eco Contributor',
+        greenScore: 420,
+        totalRecycledKg: 21.8,
+        avatarInitials: 'MC',
+        totalCo2ReductionKg: 5.6,
+      ),
+      AppUser(
+        id: 'u3',
+        name: 'Leo Wang',
+        email: 'leo.wang@example.com',
+        city: 'Shanghai',
+        level: 'Eco Partner',
+        greenScore: 368,
+        totalRecycledKg: 18.2,
+        avatarInitials: 'LW',
+        totalCo2ReductionKg: 4.2,
+      ),
+      AppUser(
+        id: 'u4',
+        name: 'Ava Smith',
+        email: 'ava.smith@example.com',
+        city: 'Shanghai',
+        level: 'Eco Volunteer',
+        greenScore: 512,
+        totalRecycledKg: 26.4,
+        avatarInitials: 'AS',
+        totalCo2ReductionKg: 7.1,
+      ),
+    ];
+
+    for (final user in users) {
+      final exists = await _connection.query(
+        'SELECT COUNT(*) AS count FROM app_users WHERE id = ?',
+        [user.id],
+      );
+      if (_readInt(exists.first.fields['count']) > 0) {
+        continue;
+      }
+      await _connection.query(
+        '''
+        INSERT INTO app_users (
+          id, name, email, city, level, green_score, total_recycled_kg, avatar_initials, total_co2_reduction_kg
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+        [
+          user.id,
+          user.name,
+          user.email,
+          user.city,
+          user.level,
+          user.greenScore,
+          user.totalRecycledKg,
+          user.avatarInitials,
+          user.totalCo2ReductionKg,
+        ],
+      );
+    }
+  }
+
+  Future<void> _seedChatIfNeeded() async {
+    final countResult = await _connection.query(
+      'SELECT COUNT(*) AS count FROM chat_messages',
+    );
+    if (_readInt(countResult.first.fields['count']) > 0) {
+      return;
+    }
+
+    Future<void> seedDirectConversation({
+      required String conversationId,
+      required String userA,
+      required String userB,
+      required List<_SeedChatMessage> messages,
+    }) async {
+      await _connection.query(
+        '''
+        INSERT IGNORE INTO chat_conversations (id, conversation_type, latest_message_id, created_at, updated_at)
+        VALUES (?, 'direct', NULL, NOW(), NOW())
+        ''',
+        [conversationId],
+      );
+
+      await _connection.query(
+        '''
+        INSERT IGNORE INTO chat_conversation_participants (
+          conversation_id, user_id, joined_at, last_read_message_id, last_read_at
+        ) VALUES (?, ?, NOW(), NULL, NULL)
+        ''',
+        [conversationId, userA],
+      );
+      await _connection.query(
+        '''
+        INSERT IGNORE INTO chat_conversation_participants (
+          conversation_id, user_id, joined_at, last_read_message_id, last_read_at
+        ) VALUES (?, ?, NOW(), NULL, NULL)
+        ''',
+        [conversationId, userB],
+      );
+
+      int? latestId;
+      for (final message in messages) {
+        final insert = await _connection.query(
+          '''
+          INSERT INTO chat_messages (conversation_id, sender_id, message_type, content, created_at)
+          VALUES (?, ?, ?, ?, ?)
+          ''',
+          [
+            conversationId,
+            message.senderId,
+            message.messageType,
+            message.content,
+            message.createdAt,
+          ],
+        );
+        latestId = _readInt(insert.insertId);
+      }
+
+      if (latestId != null) {
+        await _connection.query(
+          '''
+          UPDATE chat_conversations
+          SET latest_message_id = ?, updated_at = NOW()
+          WHERE id = ?
+          ''',
+          [latestId, conversationId],
+        );
+      }
+    }
+
+    await seedDirectConversation(
+      conversationId: _buildDirectConversationId('u1', 'u2'),
+      userA: 'u1',
+      userB: 'u2',
+      messages: const [
+        _SeedChatMessage(
+          senderId: 'u2',
+          messageType: 'text',
+          content: 'Hi! Do you know where to dispose oily takeaway boxes?',
+          createdAt: '2026-04-27 10:12:00',
+        ),
+        _SeedChatMessage(
+          senderId: 'u1',
+          messageType: 'text',
+          content: 'Usually residual waste. If clean, paper recycle bin.',
+          createdAt: '2026-04-27 10:13:40',
+        ),
+      ],
+    );
+
+    await seedDirectConversation(
+      conversationId: _buildDirectConversationId('u1', 'u3'),
+      userA: 'u1',
+      userB: 'u3',
+      messages: const [
+        _SeedChatMessage(
+          senderId: 'u3',
+          messageType: 'image',
+          content:
+              'https://images.unsplash.com/photo-1605600659873-d808a13e4f2a?w=1200',
+          createdAt: '2026-04-27 09:05:00',
+        ),
+      ],
+    );
+
+    await seedDirectConversation(
+      conversationId: _buildDirectConversationId('u1', 'u4'),
+      userA: 'u1',
+      userB: 'u4',
+      messages: const [
+        _SeedChatMessage(
+          senderId: 'u4',
+          messageType: 'text',
+          content: 'Battery collection point has moved near the library.',
+          createdAt: '2026-04-26 20:01:12',
+        ),
+      ],
+    );
+
+    await _connection.query(
+      '''
+      UPDATE chat_conversation_participants p
+      INNER JOIN (
+        SELECT conversation_id, MAX(id) AS latest_id
+        FROM chat_messages
+        GROUP BY conversation_id
+      ) m ON m.conversation_id = p.conversation_id
+      SET
+        p.last_read_message_id = CASE
+          WHEN p.user_id = ? THEN m.latest_id
+          ELSE NULL
+        END,
+        p.last_read_at = CASE
+          WHEN p.user_id = ? THEN NOW()
+          ELSE NULL
+        END
+      ''',
+      [_defaultUserId, _defaultUserId],
     );
   }
 
@@ -771,24 +1124,358 @@ class MySqlWasteDataService implements WasteDataService {
   @override
   Future<List<ForumPost>> getForumPosts() async {
     final result = await _connection.query(
-      'SELECT id, author, title, content, tag, likes, replies, created_at '
-      'FROM forum_posts ORDER BY id',
+      '''
+      SELECT
+        p.id,
+        COALESCE(p.author_id, '') AS author_id,
+        p.author,
+        p.title,
+        p.content,
+        p.tag,
+        p.likes,
+        (
+          SELECT COUNT(*)
+          FROM forum_comments c
+          WHERE c.post_id = p.id
+        ) AS replies,
+        p.created_at,
+        EXISTS(
+          SELECT 1
+          FROM forum_post_likes l
+          WHERE l.post_id = p.id AND l.user_id = ?
+        ) AS liked_by_me
+      FROM forum_posts p
+      ORDER BY p.created_at DESC
+      ''',
+      [_defaultUserId],
     );
 
     return result
         .map(
           (row) => ForumPost(
-            id: row[0] as String,
-            author: row[1] as String,
-            title: row[2] as String,
-            content: row[3] as String,
-            tag: row[4] as String,
-            likes: _readInt(row[5]),
-            replies: _readInt(row[6]),
-            createdAt: row[7] as String,
+            id: _readText(row[0]),
+            authorId: _readText(row[1]),
+            author: _readText(row[2]),
+            title: _readText(row[3]),
+            content: _readText(row[4]),
+            tag: _readText(row[5]),
+            likes: _readInt(row[6]),
+            replies: _readInt(row[7]),
+            createdAt: _readText(row[8]),
+            likedByMe: _readBool(row[9]),
           ),
         )
         .toList(growable: false);
+  }
+
+  @override
+  Future<ForumPost> createForumPost({
+    required String authorId,
+    required String title,
+    required String content,
+    required String tag,
+  }) async {
+    final user = await _getUserById(authorId);
+    if (user == null) {
+      throw StateError('User not found: $authorId');
+    }
+
+    final postId = _newPostId();
+    final safeTitle = title.trim();
+    final safeContent = content.trim();
+    final safeTag = tag.trim().isEmpty ? 'General' : tag.trim();
+
+    if (safeTitle.isEmpty || safeContent.isEmpty) {
+      throw StateError('title and content are required.');
+    }
+
+    await _connection.query(
+      '''
+      INSERT INTO forum_posts (
+        id, author_id, author, title, content, tag, likes, replies, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)
+      ''',
+      [
+        postId,
+        authorId,
+        user.name,
+        safeTitle,
+        safeContent,
+        safeTag,
+        _nowAsString(),
+      ],
+    );
+
+    final posts = await getForumPosts();
+    return posts.firstWhere((item) => item.id == postId);
+  }
+
+  @override
+  Future<ForumPost> toggleForumPostLike({
+    required String postId,
+    required String userId,
+  }) async {
+    final postExists = await _connection.query(
+      'SELECT COUNT(*) AS count FROM forum_posts WHERE id = ?',
+      [postId],
+    );
+    if (_readInt(postExists.first.fields['count']) == 0) {
+      throw StateError('Forum post not found: $postId');
+    }
+
+    await _connection.transaction((tx) async {
+      final liked = await tx.query(
+        'SELECT COUNT(*) AS count FROM forum_post_likes WHERE post_id = ? AND user_id = ?',
+        [postId, userId],
+      );
+      final hasLiked = _readInt(liked.first.fields['count']) > 0;
+      if (hasLiked) {
+        await tx.query(
+          'DELETE FROM forum_post_likes WHERE post_id = ? AND user_id = ?',
+          [postId, userId],
+        );
+        await tx.query(
+          'UPDATE forum_posts SET likes = GREATEST(likes - 1, 0) WHERE id = ?',
+          [postId],
+        );
+      } else {
+        await tx.query(
+          'INSERT INTO forum_post_likes (post_id, user_id) VALUES (?, ?)',
+          [postId, userId],
+        );
+        await tx.query(
+          'UPDATE forum_posts SET likes = likes + 1 WHERE id = ?',
+          [postId],
+        );
+      }
+    });
+
+    final posts = await getForumPosts();
+    return posts.firstWhere((item) => item.id == postId);
+  }
+
+  @override
+  Future<List<ForumComment>> getForumComments({
+    required String postId,
+    String? userId,
+  }) async {
+    final viewer = (userId?.trim().isNotEmpty ?? false) ? userId!.trim() : _defaultUserId;
+    final rows = await _connection.query(
+      '''
+      SELECT
+        c.id,
+        c.post_id,
+        c.parent_comment_id,
+        COALESCE(c.author_id, '') AS author_id,
+        c.author,
+        c.content,
+        c.likes,
+        DATE_FORMAT(c.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+        EXISTS(
+          SELECT 1
+          FROM forum_comment_likes l
+          WHERE l.comment_id = c.id AND l.user_id = ?
+        ) AS liked_by_me
+      FROM forum_comments c
+      WHERE c.post_id = ?
+      ORDER BY c.created_at ASC, c.id ASC
+      ''',
+      [viewer, postId],
+    );
+
+    final flat = rows
+        .map(
+          (row) => ForumComment(
+            id: _readText(row[0]),
+            postId: _readText(row[1]),
+            parentCommentId: _readNullableText(row[2]),
+            authorId: _readText(row[3]),
+            author: _readText(row[4]),
+            content: _readText(row[5]),
+            likes: _readInt(row[6]),
+            createdAt: _readText(row[7]),
+            likedByMe: _readBool(row[8]),
+          ),
+        )
+        .toList(growable: false);
+
+    return _buildCommentTree(flat);
+  }
+
+  @override
+  Future<ForumComment> createForumComment({
+    required String postId,
+    required String authorId,
+    required String content,
+    String? parentCommentId,
+  }) async {
+    final postExists = await _connection.query(
+      'SELECT COUNT(*) AS count FROM forum_posts WHERE id = ?',
+      [postId],
+    );
+    if (_readInt(postExists.first.fields['count']) == 0) {
+      throw StateError('Forum post not found: $postId');
+    }
+
+    final user = await _getUserById(authorId);
+    if (user == null) {
+      throw StateError('User not found: $authorId');
+    }
+
+    final safeContent = content.trim();
+    if (safeContent.isEmpty) {
+      throw StateError('Comment content is required.');
+    }
+
+    final safeParentId =
+        parentCommentId?.trim().isEmpty ?? true ? null : parentCommentId!.trim();
+    if (safeParentId != null) {
+      final parentExists = await _connection.query(
+        'SELECT COUNT(*) AS count FROM forum_comments WHERE id = ? AND post_id = ?',
+        [safeParentId, postId],
+      );
+      if (_readInt(parentExists.first.fields['count']) == 0) {
+        throw StateError('Parent comment not found for this post.');
+      }
+    }
+
+    final commentId = _newCommentId();
+    await _connection.query(
+      '''
+      INSERT INTO forum_comments (
+        id, post_id, parent_comment_id, author_id, author, content, likes, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+      ''',
+      [
+        commentId,
+        postId,
+        safeParentId,
+        authorId,
+        user.name,
+        safeContent,
+        _nowAsString(),
+      ],
+    );
+
+    await _connection.query(
+      '''
+      UPDATE forum_posts p
+      SET p.replies = (
+        SELECT COUNT(*)
+        FROM forum_comments c
+        WHERE c.post_id = p.id
+      )
+      WHERE p.id = ?
+      ''',
+      [postId],
+    );
+
+    final rows = await _connection.query(
+      '''
+      SELECT
+        id,
+        post_id,
+        parent_comment_id,
+        COALESCE(author_id, '') AS author_id,
+        author,
+        content,
+        likes,
+        DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+      FROM forum_comments
+      WHERE id = ?
+      LIMIT 1
+      ''',
+      [commentId],
+    );
+    final row = rows.first;
+    return ForumComment(
+      id: _readText(row[0]),
+      postId: _readText(row[1]),
+      parentCommentId: _readNullableText(row[2]),
+      authorId: _readText(row[3]),
+      author: _readText(row[4]),
+      content: _readText(row[5]),
+      likes: _readInt(row[6]),
+      createdAt: _readText(row[7]),
+      likedByMe: false,
+    );
+  }
+
+  @override
+  Future<ForumComment> toggleForumCommentLike({
+    required String commentId,
+    required String userId,
+  }) async {
+    final commentRows = await _connection.query(
+      'SELECT id, post_id FROM forum_comments WHERE id = ? LIMIT 1',
+      [commentId],
+    );
+    if (commentRows.isEmpty) {
+      throw StateError('Forum comment not found: $commentId');
+    }
+
+    await _connection.transaction((tx) async {
+      final liked = await tx.query(
+        'SELECT COUNT(*) AS count FROM forum_comment_likes WHERE comment_id = ? AND user_id = ?',
+        [commentId, userId],
+      );
+      final hasLiked = _readInt(liked.first.fields['count']) > 0;
+      if (hasLiked) {
+        await tx.query(
+          'DELETE FROM forum_comment_likes WHERE comment_id = ? AND user_id = ?',
+          [commentId, userId],
+        );
+        await tx.query(
+          'UPDATE forum_comments SET likes = GREATEST(likes - 1, 0) WHERE id = ?',
+          [commentId],
+        );
+      } else {
+        await tx.query(
+          'INSERT INTO forum_comment_likes (comment_id, user_id) VALUES (?, ?)',
+          [commentId, userId],
+        );
+        await tx.query(
+          'UPDATE forum_comments SET likes = likes + 1 WHERE id = ?',
+          [commentId],
+        );
+      }
+    });
+
+    final row = await _connection.query(
+      '''
+      SELECT
+        c.id,
+        c.post_id,
+        c.parent_comment_id,
+        COALESCE(c.author_id, '') AS author_id,
+        c.author,
+        c.content,
+        c.likes,
+        DATE_FORMAT(c.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+        EXISTS(
+          SELECT 1
+          FROM forum_comment_likes l
+          WHERE l.comment_id = c.id AND l.user_id = ?
+        ) AS liked_by_me
+      FROM forum_comments c
+      WHERE c.id = ?
+      LIMIT 1
+      ''',
+      [userId, commentId],
+    );
+
+    final item = row.first;
+    return ForumComment(
+      id: _readText(item[0]),
+      postId: _readText(item[1]),
+      parentCommentId: _readNullableText(item[2]),
+      authorId: _readText(item[3]),
+      author: _readText(item[4]),
+      content: _readText(item[5]),
+      likes: _readInt(item[6]),
+      createdAt: _readText(item[7]),
+      likedByMe: _readBool(item[8]),
+    );
   }
 
   @override
@@ -808,6 +1495,236 @@ class MySqlWasteDataService implements WasteDataService {
           ),
         )
         .toList(growable: false);
+  }
+
+  @override
+  Future<List<ChatConversationSummary>> getChatConversations({
+    required String userId,
+  }) async {
+    final user = await _getUserById(userId);
+    if (user == null) {
+      throw StateError('User not found: $userId');
+    }
+
+    final result = await _connection.query(
+      '''
+      SELECT
+        c.id AS conversation_id,
+        peer.id AS peer_user_id,
+        peer.name AS peer_name,
+        peer.avatar_initials AS peer_avatar_initials,
+        m.message_type,
+        m.content,
+        DATE_FORMAT(m.created_at, '%Y-%m-%d %H:%i:%s') AS latest_created_at,
+        (
+          SELECT COUNT(*)
+          FROM chat_messages um
+          WHERE um.conversation_id = c.id
+            AND um.id > COALESCE(self.last_read_message_id, 0)
+            AND um.sender_id <> ?
+        ) AS unread_count
+      FROM chat_conversations c
+      INNER JOIN chat_conversation_participants self
+        ON self.conversation_id = c.id
+       AND self.user_id = ?
+      INNER JOIN chat_conversation_participants peer_participant
+        ON peer_participant.conversation_id = c.id
+       AND peer_participant.user_id <> ?
+      INNER JOIN app_users peer
+        ON peer.id = peer_participant.user_id
+      LEFT JOIN chat_messages m
+        ON m.id = c.latest_message_id
+      WHERE c.conversation_type = 'direct'
+      ORDER BY c.updated_at DESC
+      ''',
+      [userId, userId, userId],
+    );
+
+    return result.map((row) {
+      final messageType = _readText(row[4]);
+      final content = _readText(row[5]);
+      final preview = messageType == 'image'
+          ? '[Image]'
+          : (content.length > 120 ? '${content.substring(0, 120)}...' : content);
+      return ChatConversationSummary(
+        id: _readText(row[0]),
+        peerUserId: _readText(row[1]),
+        peerName: _readText(row[2]),
+        peerAvatarInitials: _readText(row[3]),
+        preview: preview,
+        updatedAt: _readText(row[6]),
+        unreadCount: _readInt(row[7]),
+        latestMessageType: messageType.isEmpty ? 'text' : messageType,
+      );
+    }).toList(growable: false);
+  }
+
+  @override
+  Future<String> getOrCreateDirectConversation({
+    required String userId,
+    required String peerUserId,
+  }) async {
+    if (userId == peerUserId) {
+      throw StateError('Cannot create conversation with yourself.');
+    }
+    final user = await _getUserById(userId);
+    if (user == null) {
+      throw StateError('User not found: $userId');
+    }
+    final peer = await _getUserById(peerUserId);
+    if (peer == null) {
+      throw StateError('Peer user not found: $peerUserId');
+    }
+
+    final conversationId = _buildDirectConversationId(userId, peerUserId);
+    await _connection.transaction((tx) async {
+      await tx.query(
+        '''
+        INSERT IGNORE INTO chat_conversations (
+          id, conversation_type, latest_message_id, created_at, updated_at
+        ) VALUES (?, 'direct', NULL, NOW(), NOW())
+        ''',
+        [conversationId],
+      );
+      await tx.query(
+        '''
+        INSERT IGNORE INTO chat_conversation_participants (
+          conversation_id, user_id, joined_at, last_read_message_id, last_read_at
+        ) VALUES (?, ?, NOW(), NULL, NULL)
+        ''',
+        [conversationId, userId],
+      );
+      await tx.query(
+        '''
+        INSERT IGNORE INTO chat_conversation_participants (
+          conversation_id, user_id, joined_at, last_read_message_id, last_read_at
+        ) VALUES (?, ?, NOW(), NULL, NULL)
+        ''',
+        [conversationId, peerUserId],
+      );
+    });
+
+    return conversationId;
+  }
+
+  @override
+  Future<List<ChatMessage>> getChatMessages({
+    required String userId,
+    required String conversationId,
+    int? afterMessageId,
+    int limit = 50,
+  }) async {
+    final inConversation = await _connection.query(
+      '''
+      SELECT COUNT(*) AS count
+      FROM chat_conversation_participants
+      WHERE conversation_id = ? AND user_id = ?
+      ''',
+      [conversationId, userId],
+    );
+    if (_readInt(inConversation.first.fields['count']) == 0) {
+      throw StateError('Conversation not found or access denied.');
+    }
+
+    final safeLimit = limit.clamp(1, 200);
+    final result = await _connection.query(
+      '''
+      SELECT
+        m.id,
+        m.conversation_id,
+        m.sender_id,
+        u.name AS sender_name,
+        u.avatar_initials AS sender_avatar_initials,
+        m.message_type,
+        m.content,
+        DATE_FORMAT(m.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+      FROM chat_messages m
+      INNER JOIN app_users u ON u.id = m.sender_id
+      WHERE m.conversation_id = ?
+        AND (? IS NULL OR m.id > ?)
+      ORDER BY m.id ASC
+      LIMIT ?
+      ''',
+      [conversationId, afterMessageId, afterMessageId, safeLimit],
+    );
+
+    return result
+        .map(
+          (row) => ChatMessage(
+            id: _readInt(row[0]),
+            conversationId: _readText(row[1]),
+            senderId: _readText(row[2]),
+            senderName: _readText(row[3]),
+            senderAvatarInitials: _readText(row[4]),
+            messageType: _readText(row[5]),
+            content: _readText(row[6]),
+            createdAt: _readText(row[7]),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<ChatMessage> sendChatTextMessage({
+    required String userId,
+    required String conversationId,
+    required String content,
+  }) async {
+    return _sendChatMessage(
+      userId: userId,
+      conversationId: conversationId,
+      messageType: 'text',
+      content: content,
+    );
+  }
+
+  @override
+  Future<ChatMessage> sendChatImageMessage({
+    required String userId,
+    required String conversationId,
+    required String imageUrl,
+  }) async {
+    return _sendChatMessage(
+      userId: userId,
+      conversationId: conversationId,
+      messageType: 'image',
+      content: imageUrl,
+    );
+  }
+
+  @override
+  Future<void> markConversationRead({
+    required String userId,
+    required String conversationId,
+  }) async {
+    final participant = await _connection.query(
+      '''
+      SELECT COUNT(*) AS count
+      FROM chat_conversation_participants
+      WHERE conversation_id = ? AND user_id = ?
+      ''',
+      [conversationId, userId],
+    );
+    if (_readInt(participant.first.fields['count']) == 0) {
+      throw StateError('Conversation not found or access denied.');
+    }
+
+    await _connection.query(
+      '''
+      UPDATE chat_conversation_participants p
+      LEFT JOIN (
+        SELECT conversation_id, MAX(id) AS latest_id
+        FROM chat_messages
+        WHERE conversation_id = ?
+        GROUP BY conversation_id
+      ) m ON m.conversation_id = p.conversation_id
+      SET
+        p.last_read_message_id = m.latest_id,
+        p.last_read_at = NOW()
+      WHERE p.conversation_id = ? AND p.user_id = ?
+      ''',
+      [conversationId, conversationId, userId],
+    );
   }
 
   @override
@@ -1396,6 +2313,109 @@ class MySqlWasteDataService implements WasteDataService {
     );
   }
 
+  Future<ChatMessage> _sendChatMessage({
+    required String userId,
+    required String conversationId,
+    required String messageType,
+    required String content,
+  }) async {
+    final safeContent = content.trim();
+    if (safeContent.isEmpty) {
+      throw StateError(
+        messageType == 'image' ? 'imageUrl is required.' : 'content is required.',
+      );
+    }
+    if (messageType != 'text' && messageType != 'image') {
+      throw StateError('Unsupported messageType: $messageType');
+    }
+
+    final sender = await _getUserById(userId);
+    if (sender == null) {
+      throw StateError('User not found: $userId');
+    }
+    final inConversation = await _connection.query(
+      '''
+      SELECT COUNT(*) AS count
+      FROM chat_conversation_participants
+      WHERE conversation_id = ? AND user_id = ?
+      ''',
+      [conversationId, userId],
+    );
+    if (_readInt(inConversation.first.fields['count']) == 0) {
+      throw StateError('Conversation not found or access denied.');
+    }
+
+    int messageId = 0;
+    await _connection.transaction((tx) async {
+      final insert = await tx.query(
+        '''
+        INSERT INTO chat_messages (conversation_id, sender_id, message_type, content, created_at)
+        VALUES (?, ?, ?, ?, NOW())
+        ''',
+        [conversationId, userId, messageType, safeContent],
+      );
+      messageId = _readInt(insert.insertId);
+
+      await tx.query(
+        '''
+        UPDATE chat_conversations
+        SET latest_message_id = ?, updated_at = NOW()
+        WHERE id = ?
+        ''',
+        [messageId, conversationId],
+      );
+
+      await tx.query(
+        '''
+        UPDATE chat_conversation_participants
+        SET
+          last_read_message_id = ?,
+          last_read_at = NOW()
+        WHERE conversation_id = ? AND user_id = ?
+        ''',
+        [messageId, conversationId, userId],
+      );
+    });
+
+    final result = await _connection.query(
+      '''
+      SELECT
+        m.id,
+        m.conversation_id,
+        m.sender_id,
+        u.name,
+        u.avatar_initials,
+        m.message_type,
+        m.content,
+        DATE_FORMAT(m.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+      FROM chat_messages m
+      INNER JOIN app_users u ON u.id = m.sender_id
+      WHERE m.id = ?
+      LIMIT 1
+      ''',
+      [messageId],
+    );
+
+    final row = result.first;
+    return ChatMessage(
+      id: _readInt(row[0]),
+      conversationId: _readText(row[1]),
+      senderId: _readText(row[2]),
+      senderName: _readText(row[3]).isEmpty ? sender.name : _readText(row[3]),
+      senderAvatarInitials: _readText(row[4]).isEmpty
+          ? sender.avatarInitials
+          : _readText(row[4]),
+      messageType: _readText(row[5]),
+      content: _readText(row[6]),
+      createdAt: _readText(row[7]),
+    );
+  }
+
+  String _buildDirectConversationId(String userA, String userB) {
+    final ids = [userA.trim(), userB.trim()]..sort();
+    return 'direct-${ids[0]}-${ids[1]}';
+  }
+
   List<String> _readStringList(Object? value) {
     if (value == null) {
       return const [];
@@ -1450,6 +2470,62 @@ class MySqlWasteDataService implements WasteDataService {
     return value.toString();
   }
 
+  String? _readNullableText(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    final text = _readText(value).trim();
+    return text.isEmpty ? null : text;
+  }
+
+  String _newPostId() {
+    return 'p${DateTime.now().microsecondsSinceEpoch}';
+  }
+
+  String _newCommentId() {
+    return 'c${DateTime.now().microsecondsSinceEpoch}';
+  }
+
+  String _nowAsString() {
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${now.year}-${two(now.month)}-${two(now.day)} ${two(now.hour)}:${two(now.minute)}:${two(now.second)}';
+  }
+
+  List<ForumComment> _buildCommentTree(List<ForumComment> flat) {
+    final byParent = <String, List<ForumComment>>{};
+    final roots = <ForumComment>[];
+
+    for (final item in flat) {
+      final parentId = item.parentCommentId;
+      if (parentId == null) {
+        roots.add(item);
+      } else {
+        byParent.putIfAbsent(parentId, () => []).add(item);
+      }
+    }
+
+    ForumComment attach(ForumComment node) {
+      final children = (byParent[node.id] ?? const <ForumComment>[])
+          .map(attach)
+          .toList(growable: false);
+      return ForumComment(
+        id: node.id,
+        postId: node.postId,
+        parentCommentId: node.parentCommentId,
+        authorId: node.authorId,
+        author: node.author,
+        content: node.content,
+        likes: node.likes,
+        createdAt: node.createdAt,
+        likedByMe: node.likedByMe,
+        replies: children,
+      );
+    }
+
+    return roots.map(attach).toList(growable: false);
+  }
+
   int _roundToInt(double value) {
     return value.round();
   }
@@ -1463,4 +2539,18 @@ class MySqlWasteDataService implements WasteDataService {
     _aliyunClient?.close();
     await _connection.close();
   }
+}
+
+class _SeedChatMessage {
+  const _SeedChatMessage({
+    required this.senderId,
+    required this.messageType,
+    required this.content,
+    required this.createdAt,
+  });
+
+  final String senderId;
+  final String messageType;
+  final String content;
+  final String createdAt;
 }

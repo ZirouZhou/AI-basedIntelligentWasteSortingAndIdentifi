@@ -267,6 +267,40 @@ class InMemoryWasteDataService implements WasteDataService {
     ),
   ];
 
+  static final _memoryMessages = <ChatMessage>[
+    ChatMessage(
+      id: 1,
+      conversationId: 'chat-u1-u2',
+      senderId: 'u2',
+      senderName: 'Mia Chen',
+      senderAvatarInitials: 'MC',
+      messageType: 'text',
+      content: 'Hi! Do you know where to dispose oily takeaway boxes?',
+      createdAt: '2026-04-27 10:12:00',
+    ),
+    ChatMessage(
+      id: 2,
+      conversationId: 'chat-u1-u2',
+      senderId: 'u1',
+      senderName: 'Alex Green',
+      senderAvatarInitials: 'AG',
+      messageType: 'text',
+      content: 'Usually residual waste. If clean, paper recycle bin.',
+      createdAt: '2026-04-27 10:13:40',
+    ),
+    ChatMessage(
+      id: 3,
+      conversationId: 'chat-u1-u3',
+      senderId: 'u3',
+      senderName: 'Leo Wang',
+      senderAvatarInitials: 'LW',
+      messageType: 'image',
+      content:
+          'https://images.unsplash.com/photo-1605600659873-d808a13e4f2a?w=1200',
+      createdAt: '2026-04-27 09:05:00',
+    ),
+  ];
+
   @override
   Future<List<WasteCategory>> getCategories() async => categories;
 
@@ -280,7 +314,216 @@ class InMemoryWasteDataService implements WasteDataService {
   Future<List<ForumPost>> getForumPosts() async => forumPosts;
 
   @override
+  Future<ForumPost> createForumPost({
+    required String authorId,
+    required String title,
+    required String content,
+    required String tag,
+  }) async {
+    final author = profile.name;
+    return ForumPost(
+      id: 'mem-${DateTime.now().millisecondsSinceEpoch}',
+      authorId: authorId,
+      author: author,
+      title: title.trim(),
+      content: content.trim(),
+      tag: tag.trim().isEmpty ? 'General' : tag.trim(),
+      likes: 0,
+      replies: 0,
+      createdAt: DateTime.now().toIso8601String(),
+      likedByMe: false,
+    );
+  }
+
+  @override
+  Future<ForumPost> toggleForumPostLike({
+    required String postId,
+    required String userId,
+  }) async {
+    final post = forumPosts.firstWhere((item) => item.id == postId);
+    return ForumPost(
+      id: post.id,
+      authorId: post.authorId,
+      author: post.author,
+      title: post.title,
+      content: post.content,
+      tag: post.tag,
+      likes: post.likes + 1,
+      replies: post.replies,
+      createdAt: post.createdAt,
+      likedByMe: true,
+    );
+  }
+
+  @override
+  Future<List<ForumComment>> getForumComments({
+    required String postId,
+    String? userId,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Future<ForumComment> createForumComment({
+    required String postId,
+    required String authorId,
+    required String content,
+    String? parentCommentId,
+  }) async {
+    return ForumComment(
+      id: 'mem-c-${DateTime.now().millisecondsSinceEpoch}',
+      postId: postId,
+      parentCommentId: parentCommentId,
+      authorId: authorId,
+      author: profile.name,
+      content: content.trim(),
+      likes: 0,
+      createdAt: DateTime.now().toIso8601String(),
+      likedByMe: false,
+    );
+  }
+
+  @override
+  Future<ForumComment> toggleForumCommentLike({
+    required String commentId,
+    required String userId,
+  }) async {
+    return ForumComment(
+      id: commentId,
+      postId: 'unknown',
+      parentCommentId: null,
+      authorId: userId,
+      author: profile.name,
+      content: '',
+      likes: 1,
+      createdAt: DateTime.now().toIso8601String(),
+      likedByMe: true,
+    );
+  }
+
+  @override
   Future<List<MessageThread>> getMessages() async => messages;
+
+  @override
+  Future<List<ChatConversationSummary>> getChatConversations({
+    required String userId,
+  }) async {
+    final all = <ChatConversationSummary>[
+      const ChatConversationSummary(
+        id: 'chat-u1-u2',
+        peerUserId: 'u2',
+        peerName: 'Mia Chen',
+        peerAvatarInitials: 'MC',
+        preview: 'Usually residual waste. If clean, paper recycle bin.',
+        updatedAt: '2026-04-27 10:13:40',
+        unreadCount: 0,
+        latestMessageType: 'text',
+      ),
+      const ChatConversationSummary(
+        id: 'chat-u1-u3',
+        peerUserId: 'u3',
+        peerName: 'Leo Wang',
+        peerAvatarInitials: 'LW',
+        preview: '[Image]',
+        updatedAt: '2026-04-27 09:05:00',
+        unreadCount: 1,
+        latestMessageType: 'image',
+      ),
+      const ChatConversationSummary(
+        id: 'chat-u1-u4',
+        peerUserId: 'u4',
+        peerName: 'Ava Smith',
+        peerAvatarInitials: 'AS',
+        preview: 'Battery collection point has moved near the library.',
+        updatedAt: '2026-04-26 20:01:12',
+        unreadCount: 2,
+        latestMessageType: 'text',
+      ),
+    ];
+    return all.where((_) => userId == 'u1').toList(growable: false);
+  }
+
+  @override
+  Future<String> getOrCreateDirectConversation({
+    required String userId,
+    required String peerUserId,
+  }) async {
+    final ids = [userId, peerUserId]..sort();
+    return 'chat-${ids[0]}-${ids[1]}';
+  }
+
+  @override
+  Future<List<ChatMessage>> getChatMessages({
+    required String userId,
+    required String conversationId,
+    int? afterMessageId,
+    int limit = 50,
+  }) async {
+    final safeLimit = limit.clamp(1, 200);
+    final filtered = _memoryMessages
+        .where((item) => item.conversationId == conversationId)
+        .where((item) => afterMessageId == null || item.id > afterMessageId)
+        .take(safeLimit)
+        .toList(growable: false);
+    return filtered;
+  }
+
+  @override
+  Future<ChatMessage> sendChatTextMessage({
+    required String userId,
+    required String conversationId,
+    required String content,
+  }) async {
+    final text = content.trim();
+    if (text.isEmpty) {
+      throw StateError('content is required.');
+    }
+    final now = DateTime.now();
+    final id = (_memoryMessages.isEmpty ? 0 : _memoryMessages.last.id) + 1;
+    final message = ChatMessage(
+      id: id,
+      conversationId: conversationId,
+      senderId: userId,
+      senderName: userId == profile.id ? profile.name : userId,
+      senderAvatarInitials: userId == profile.id ? profile.avatarInitials : 'U',
+      messageType: 'text',
+      content: text,
+      createdAt: now.toIso8601String(),
+    );
+    _memoryMessages.add(message);
+    return message;
+  }
+
+  @override
+  Future<ChatMessage> sendChatImageMessage({
+    required String userId,
+    required String conversationId,
+    required String imageUrl,
+  }) async {
+    final url = imageUrl.trim();
+    if (url.isEmpty) {
+      throw StateError('imageUrl is required.');
+    }
+    final id = (_memoryMessages.isEmpty ? 0 : _memoryMessages.last.id) + 1;
+    final message = ChatMessage(
+      id: id,
+      conversationId: conversationId,
+      senderId: userId,
+      senderName: userId == profile.id ? profile.name : userId,
+      senderAvatarInitials: userId == profile.id ? profile.avatarInitials : 'U',
+      messageType: 'image',
+      content: url,
+      createdAt: DateTime.now().toIso8601String(),
+    );
+    _memoryMessages.add(message);
+    return message;
+  }
+
+  @override
+  Future<void> markConversationRead({
+    required String userId,
+    required String conversationId,
+  }) async {}
 
   @override
   Future<AppUser> getProfile() async => profile;

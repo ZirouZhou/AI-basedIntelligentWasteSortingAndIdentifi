@@ -13,10 +13,10 @@ import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 import '../models/app_user.dart';
+import '../models/chat_models.dart';
 import '../models/eco_action.dart';
 import '../models/eco_reward_models.dart';
 import '../models/forum_post.dart';
-import '../models/message_thread.dart';
 import '../models/reward.dart';
 import '../models/weather_info.dart';
 import '../models/waste_category.dart';
@@ -95,13 +95,144 @@ class ApiClient {
     return list.map((map) => ForumPost.fromJson(map)).toList(growable: false);
   }
 
-  /// Fetches the message threads for the current user.
-  Future<List<MessageThread>> fetchMessages(String userId) async {
-    final body = await _get('/messages');
+  /// Creates a new forum post.
+  Future<ForumPost> createForumPost({
+    required String authorId,
+    required String title,
+    required String content,
+    required String tag,
+  }) async {
+    final body = await _postJson('/forum-posts', {
+      'authorId': authorId,
+      'title': title,
+      'content': content,
+      'tag': tag,
+    });
+    return ForumPost.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// Toggles like for one forum post.
+  Future<ForumPost> toggleForumPostLike({
+    required String postId,
+    required String userId,
+  }) async {
+    final body = await _postJson('/forum-posts/$postId/like', {'userId': userId});
+    return ForumPost.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// Fetches nested comments for one post.
+  Future<List<ForumComment>> fetchForumComments({
+    required String postId,
+    required String userId,
+  }) async {
+    final body = await _get('/forum-posts/$postId/comments?userId=$userId');
+    final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
+    return list.map(ForumComment.fromJson).toList(growable: false);
+  }
+
+  /// Creates a comment or reply comment for one post.
+  Future<ForumComment> createForumComment({
+    required String postId,
+    required String authorId,
+    required String content,
+    String? parentCommentId,
+  }) async {
+    final body = await _postJson('/forum-posts/$postId/comments', {
+      'authorId': authorId,
+      'content': content,
+      if (parentCommentId != null && parentCommentId.trim().isNotEmpty)
+        'parentCommentId': parentCommentId,
+    });
+    return ForumComment.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// Toggles like for one comment.
+  Future<ForumComment> toggleForumCommentLike({
+    required String commentId,
+    required String userId,
+  }) async {
+    final body = await _postJson('/forum-comments/$commentId/like', {
+      'userId': userId,
+    });
+    return ForumComment.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// Fetches chat conversation summaries for one user.
+  Future<List<ChatConversationSummary>> fetchChatConversations({
+    required String userId,
+  }) async {
+    final body = await _get('/chat/conversations?userId=$userId');
     final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
     return list
-        .map((map) => MessageThread.fromJson(map))
+        .map(ChatConversationSummary.fromJson)
         .toList(growable: false);
+  }
+
+  /// Creates (or returns) direct conversation id for two users.
+  Future<String> getOrCreateDirectConversation({
+    required String userId,
+    required String peerUserId,
+  }) async {
+    final body = await _postJson('/chat/conversations/direct', {
+      'userId': userId,
+      'peerUserId': peerUserId,
+    });
+    final json = jsonDecode(body) as Map<String, dynamic>;
+    return json['conversationId'] as String;
+  }
+
+  /// Fetches chat messages in ascending order.
+  Future<List<ChatMessage>> fetchChatMessages({
+    required String userId,
+    required String conversationId,
+    int? afterMessageId,
+    int limit = 50,
+  }) async {
+    final afterPart = afterMessageId == null ? '' : '&afterMessageId=$afterMessageId';
+    final body = await _get(
+      '/chat/messages?userId=$userId&conversationId=$conversationId&limit=$limit$afterPart',
+    );
+    final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
+    return list.map(ChatMessage.fromJson).toList(growable: false);
+  }
+
+  /// Sends a text message.
+  Future<ChatMessage> sendChatTextMessage({
+    required String userId,
+    required String conversationId,
+    required String content,
+  }) async {
+    final body = await _postJson('/chat/messages/text', {
+      'userId': userId,
+      'conversationId': conversationId,
+      'content': content,
+    });
+    return ChatMessage.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// Sends an image message with URL payload.
+  Future<ChatMessage> sendChatImageMessage({
+    required String userId,
+    required String conversationId,
+    required String imageUrl,
+  }) async {
+    final body = await _postJson('/chat/messages/image', {
+      'userId': userId,
+      'conversationId': conversationId,
+      'imageUrl': imageUrl,
+    });
+    return ChatMessage.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// Marks one conversation as read for one user.
+  Future<void> markChatConversationRead({
+    required String userId,
+    required String conversationId,
+  }) async {
+    await _postJson('/chat/conversations/read', {
+      'userId': userId,
+      'conversationId': conversationId,
+    });
   }
 
   /// Fetches eco-action evaluation catalog.

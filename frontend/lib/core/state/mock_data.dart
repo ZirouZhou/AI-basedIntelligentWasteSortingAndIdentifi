@@ -12,9 +12,9 @@
 // ------------------------------------------------------------------------------------------------
 
 import '../models/app_user.dart';
+import '../models/chat_models.dart';
 import '../models/eco_action.dart';
 import '../models/forum_post.dart';
-import '../models/message_thread.dart';
 import '../models/reward.dart';
 import '../models/waste_category.dart';
 
@@ -219,27 +219,36 @@ class MockData {
   // ----------------------------------------------------------------------------------------------
 
   /// Sample in-app message conversations.
-  static const messages = <MessageThread>[
-    MessageThread(
+  static const messages = <ChatConversationSummary>[
+    ChatConversationSummary(
       id: 'm1',
-      sender: 'EcoSort AI',
+      peerUserId: 'bot',
+      peerName: 'EcoSort AI',
+      peerAvatarInitials: 'EA',
       preview: 'Your weekly green report is ready.',
       updatedAt: '09:30',
-      unread: true,
+      unreadCount: 1,
+      latestMessageType: 'text',
     ),
-    MessageThread(
+    ChatConversationSummary(
       id: 'm2',
-      sender: 'Campus Green Club',
+      peerUserId: 'club',
+      peerName: 'Campus Green Club',
+      peerAvatarInitials: 'CG',
       preview: 'Thanks for joining the recycling challenge.',
       updatedAt: 'Yesterday',
-      unread: false,
+      unreadCount: 0,
+      latestMessageType: 'text',
     ),
-    MessageThread(
+    ChatConversationSummary(
       id: 'm3',
-      sender: 'Reward Center',
+      peerUserId: 'reward',
+      peerName: 'Reward Center',
+      peerAvatarInitials: 'RC',
       preview: 'You have enough points for a new reward.',
       updatedAt: 'Apr 16',
-      unread: true,
+      unreadCount: 1,
+      latestMessageType: 'text',
     ),
   ];
 

@@ -6,6 +6,8 @@
 library;
 
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
 
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
@@ -42,7 +44,19 @@ Router buildRouter(WasteDataService service) {
         'GET /eco-dashboard?userId=u1',
         'GET /rewards',
         'GET /forum-posts',
+        'POST /forum-posts',
+        'POST /forum-posts/:postId/like',
+        'GET /forum-posts/:postId/comments?userId=u1',
+        'POST /forum-posts/:postId/comments',
+        'POST /forum-comments/:commentId/like',
         'GET /messages',
+        'GET /chat/conversations?userId=u1',
+        'POST /chat/conversations/direct',
+        'GET /chat/messages?conversationId=...&userId=u1&afterMessageId=0',
+        'POST /chat/messages/text',
+        'POST /chat/messages/image',
+        'POST /chat/conversations/read',
+        'GET /chat/stream?conversationId=...&userId=u1&afterMessageId=0',
         'GET /profile',
       ],
     });
@@ -338,12 +352,422 @@ Router buildRouter(WasteDataService service) {
   });
 
   // ---------------------------------------------------------------------------
+  // POST /forum-posts
+  // Creates a new community post.
+  // ---------------------------------------------------------------------------
+  router.post('/forum-posts', (Request request) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+
+    final authorId = (data['authorId'] as String?)?.trim() ?? '';
+    final title = (data['title'] as String?)?.trim() ?? '';
+    final content = (data['content'] as String?)?.trim() ?? '';
+    final tag = (data['tag'] as String?)?.trim() ?? 'General';
+    if (authorId.isEmpty || title.isEmpty || content.isEmpty) {
+      return _jsonResponse(
+        {'error': 'authorId, title and content are required.'},
+        statusCode: 400,
+      );
+    }
+
+    try {
+      final post = await service.createForumPost(
+        authorId: authorId,
+        title: title,
+        content: content,
+        tag: tag,
+      );
+      return _jsonResponse(post.toJson());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /forum-posts/:postId/like
+  // Toggles like for one post by one user.
+  // ---------------------------------------------------------------------------
+  router.post('/forum-posts/<postId>/like', (Request request, String postId) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+    final userId = (data['userId'] as String?)?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+
+    try {
+      final post = await service.toggleForumPostLike(postId: postId, userId: userId);
+      return _jsonResponse(post.toJson());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /forum-posts/:postId/comments?userId=u1
+  // Returns nested comments for one post.
+  // ---------------------------------------------------------------------------
+  router.get('/forum-posts/<postId>/comments', (
+    Request request,
+    String postId,
+  ) async {
+    final userId = request.requestedUri.queryParameters['userId']?.trim();
+    final comments = await service.getForumComments(postId: postId, userId: userId);
+    return _jsonResponse(comments.map((item) => item.toJson()).toList());
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /forum-posts/:postId/comments
+  // Creates a comment or a reply comment.
+  // ---------------------------------------------------------------------------
+  router.post('/forum-posts/<postId>/comments', (
+    Request request,
+    String postId,
+  ) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+
+    final authorId = (data['authorId'] as String?)?.trim() ?? '';
+    final content = (data['content'] as String?)?.trim() ?? '';
+    final parentCommentId = (data['parentCommentId'] as String?)?.trim();
+    if (authorId.isEmpty || content.isEmpty) {
+      return _jsonResponse(
+        {'error': 'authorId and content are required.'},
+        statusCode: 400,
+      );
+    }
+
+    try {
+      final comment = await service.createForumComment(
+        postId: postId,
+        authorId: authorId,
+        content: content,
+        parentCommentId: parentCommentId,
+      );
+      return _jsonResponse(comment.toJson());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /forum-comments/:commentId/like
+  // Toggles like for one comment by one user.
+  // ---------------------------------------------------------------------------
+  router.post('/forum-comments/<commentId>/like', (
+    Request request,
+    String commentId,
+  ) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+    final userId = (data['userId'] as String?)?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+
+    try {
+      final comment = await service.toggleForumCommentLike(
+        commentId: commentId,
+        userId: userId,
+      );
+      return _jsonResponse(comment.toJson());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // GET /messages
   // Returns the user's message threads for in-app communication.
   // ---------------------------------------------------------------------------
   router.get('/messages', (Request request) async {
     final messages = await service.getMessages();
     return _jsonResponse(messages.map((item) => item.toJson()).toList());
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /chat/conversations?userId=u1
+  // Returns direct-chat conversation summaries for one user.
+  // ---------------------------------------------------------------------------
+  router.get('/chat/conversations', (Request request) async {
+    final userId =
+        request.requestedUri.queryParameters['userId']?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+
+    try {
+      final conversations = await service.getChatConversations(userId: userId);
+      return _jsonResponse(conversations.map((item) => item.toJson()).toList());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /chat/conversations/direct
+  // Creates (or returns) a direct conversation between two users.
+  // ---------------------------------------------------------------------------
+  router.post('/chat/conversations/direct', (Request request) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+
+    final userId = (data['userId'] as String?)?.trim() ?? '';
+    final peerUserId = (data['peerUserId'] as String?)?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+    if (peerUserId.isEmpty) {
+      return _jsonResponse({'error': 'peerUserId is required.'}, statusCode: 400);
+    }
+
+    try {
+      final conversationId = await service.getOrCreateDirectConversation(
+        userId: userId,
+        peerUserId: peerUserId,
+      );
+      return _jsonResponse({'conversationId': conversationId});
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /chat/messages?conversationId=...&userId=u1&afterMessageId=0&limit=50
+  // Returns chat messages in ascending order. Supports incremental fetch.
+  // ---------------------------------------------------------------------------
+  router.get('/chat/messages', (Request request) async {
+    final qp = request.requestedUri.queryParameters;
+    final userId = qp['userId']?.trim() ?? '';
+    final conversationId = qp['conversationId']?.trim() ?? '';
+    final afterMessageId = int.tryParse(qp['afterMessageId'] ?? '');
+    final limit = int.tryParse(qp['limit'] ?? '') ?? 50;
+
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+    if (conversationId.isEmpty) {
+      return _jsonResponse(
+        {'error': 'conversationId is required.'},
+        statusCode: 400,
+      );
+    }
+
+    try {
+      final messages = await service.getChatMessages(
+        userId: userId,
+        conversationId: conversationId,
+        afterMessageId: afterMessageId,
+        limit: limit,
+      );
+      return _jsonResponse(messages.map((item) => item.toJson()).toList());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /chat/messages/text
+  // Sends one text message to a chat conversation.
+  // ---------------------------------------------------------------------------
+  router.post('/chat/messages/text', (Request request) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+
+    final userId = (data['userId'] as String?)?.trim() ?? '';
+    final conversationId = (data['conversationId'] as String?)?.trim() ?? '';
+    final content = (data['content'] as String?)?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+    if (conversationId.isEmpty) {
+      return _jsonResponse(
+        {'error': 'conversationId is required.'},
+        statusCode: 400,
+      );
+    }
+    if (content.isEmpty) {
+      return _jsonResponse({'error': 'content is required.'}, statusCode: 400);
+    }
+
+    try {
+      final message = await service.sendChatTextMessage(
+        userId: userId,
+        conversationId: conversationId,
+        content: content,
+      );
+      return _jsonResponse(message.toJson());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /chat/messages/image
+  // Sends one image message with URL payload.
+  // ---------------------------------------------------------------------------
+  router.post('/chat/messages/image', (Request request) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+
+    final userId = (data['userId'] as String?)?.trim() ?? '';
+    final conversationId = (data['conversationId'] as String?)?.trim() ?? '';
+    final imageUrl = (data['imageUrl'] as String?)?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+    if (conversationId.isEmpty) {
+      return _jsonResponse(
+        {'error': 'conversationId is required.'},
+        statusCode: 400,
+      );
+    }
+    if (imageUrl.isEmpty) {
+      return _jsonResponse({'error': 'imageUrl is required.'}, statusCode: 400);
+    }
+
+    try {
+      final message = await service.sendChatImageMessage(
+        userId: userId,
+        conversationId: conversationId,
+        imageUrl: imageUrl,
+      );
+      return _jsonResponse(message.toJson());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /chat/conversations/read
+  // Marks all current messages in one conversation as read for the user.
+  // ---------------------------------------------------------------------------
+  router.post('/chat/conversations/read', (Request request) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+
+    final userId = (data['userId'] as String?)?.trim() ?? '';
+    final conversationId = (data['conversationId'] as String?)?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+    if (conversationId.isEmpty) {
+      return _jsonResponse(
+        {'error': 'conversationId is required.'},
+        statusCode: 400,
+      );
+    }
+
+    try {
+      await service.markConversationRead(
+        userId: userId,
+        conversationId: conversationId,
+      );
+      return _jsonResponse({'ok': true});
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /chat/stream?conversationId=...&userId=u1&afterMessageId=0
+  // Server-Sent Events stream that periodically pushes incremental messages.
+  // ---------------------------------------------------------------------------
+  router.get('/chat/stream', (Request request) async {
+    final qp = request.requestedUri.queryParameters;
+    final userId = qp['userId']?.trim() ?? '';
+    final conversationId = qp['conversationId']?.trim() ?? '';
+    var afterMessageId = int.tryParse(qp['afterMessageId'] ?? '') ?? 0;
+
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+    if (conversationId.isEmpty) {
+      return _jsonResponse(
+        {'error': 'conversationId is required.'},
+        statusCode: 400,
+      );
+    }
+
+    final controller = StreamController<List<int>>();
+    Timer? timer;
+
+    Future<void> emitPing() async {
+      final payload = 'event: ping\ndata: {"ok":true}\n\n';
+      controller.add(utf8.encode(payload));
+    }
+
+    Future<void> emitNewMessages() async {
+      try {
+        final messages = await service.getChatMessages(
+          userId: userId,
+          conversationId: conversationId,
+          afterMessageId: afterMessageId > 0 ? afterMessageId : null,
+          limit: 100,
+        );
+        if (messages.isEmpty) {
+          return;
+        }
+        for (final message in messages) {
+          afterMessageId = message.id;
+          final payload = jsonEncode(message.toJson());
+          controller.add(utf8.encode('event: message\ndata: $payload\n\n'));
+        }
+      } catch (error) {
+        controller.add(
+          utf8.encode('event: error\ndata: ${jsonEncode({'error': '$error'})}\n\n'),
+        );
+      }
+    }
+
+    timer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (controller.isClosed) {
+        return;
+      }
+      await emitNewMessages();
+      await emitPing();
+    });
+
+    controller.onListen = () async {
+      await emitPing();
+      await emitNewMessages();
+    };
+    controller.onCancel = () {
+      timer?.cancel();
+    };
+
+    return Response.ok(
+      controller.stream,
+      headers: {
+        HttpHeaders.contentTypeHeader: 'text/event-stream',
+        HttpHeaders.cacheControlHeader: 'no-cache',
+        HttpHeaders.connectionHeader: 'keep-alive',
+      },
+    );
   });
 
   // ---------------------------------------------------------------------------
