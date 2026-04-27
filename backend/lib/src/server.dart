@@ -9,27 +9,40 @@
 //   4. Starts listening on `0.0.0.0:<port>` so the mobile frontend can reach it.
 // ------------------------------------------------------------------------------------------------
 
+import 'dart:io';
+
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 
+import 'config/database_config.dart';
 import 'routes.dart';
-import 'services/waste_data_service.dart';
+import 'services/mysql_waste_data_service.dart';
 
 /// Starts the EcoSort HTTP server on the given [port].
 ///
 /// Creates a [WasteDataService] with demo data, wires it into the router, and
 /// serves requests on all network interfaces (`0.0.0.0`).
 Future<void> startServer({required int port}) async {
-  final service = WasteDataService.seeded();
+  final config = DatabaseConfig.fromEnvironment();
+  final service = await MySqlWasteDataService.initialize(config);
+
   final router = buildRouter(service);
   final handler = const Pipeline()
       .addMiddleware(logRequests())
       .addMiddleware(_corsMiddleware())
       .addHandler(router.call);
 
-  final server = await shelf_io.serve(handler, '0.0.0.0', port);
+  final server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
+  ProcessSignal.sigint.watch().listen((_) async {
+    await service.close();
+    exit(0);
+  });
+
   // ignore: avoid_print
-  print('EcoSort backend running at http://${server.address.host}:${server.port}');
+  print(
+    'EcoSort backend running at http://${server.address.host}:${server.port} '
+    '(MySQL: ${config.host}:${config.port}/${config.database})',
+  );
 }
 
 /// Returns a [Middleware] that adds permissive CORS headers to every response.

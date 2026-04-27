@@ -1,20 +1,20 @@
-import 'package:intelligent_waste_backend/src/services/waste_data_service.dart';
+import 'package:intelligent_waste_backend/src/services/in_memory_waste_data_service.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('classifies batteries as hazardous waste', () {
-    final service = WasteDataService.seeded();
+  test('classifies batteries as hazardous waste', () async {
+    final service = InMemoryWasteDataService.seeded();
 
-    final result = service.classify('battery');
+    final result = await service.classify('battery');
 
     expect(result.category.id, 'hazardous');
     expect(result.confidence, greaterThan(0.9));
   });
 
-  test('classifies banana peels as organic waste', () {
-    final service = WasteDataService.seeded();
+  test('classifies banana peels as organic waste', () async {
+    final service = InMemoryWasteDataService.seeded();
 
-    final result = service.classify('banana peel');
+    final result = await service.classify('banana peel');
 
     expect(result.category.id, 'organic');
   });

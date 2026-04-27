@@ -1,13 +1,13 @@
 import 'dart:convert';
 
 import 'package:intelligent_waste_backend/src/routes.dart';
-import 'package:intelligent_waste_backend/src/services/waste_data_service.dart';
+import 'package:intelligent_waste_backend/src/services/in_memory_waste_data_service.dart';
 import 'package:shelf/shelf.dart';
 import 'package:test/test.dart';
 
 void main() {
   test('GET / returns service metadata and endpoint list', () async {
-    final service = WasteDataService.seeded();
+    final service = InMemoryWasteDataService.seeded();
     final router = buildRouter(service);
 
     final response = await router(Request('GET', Uri.parse('http://localhost/')));

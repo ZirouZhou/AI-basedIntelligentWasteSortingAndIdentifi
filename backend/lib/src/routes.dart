@@ -44,11 +44,15 @@ Router buildRouter(WasteDataService service) {
   // Health check endpoint – used by monitoring tools or load balancers to
   // verify that the service is running.
   // ---------------------------------------------------------------------------
-  router.get('/health', (Request request) {
+  router.get('/health', (Request request) async {
+    final dbConnected = await service.pingDatabase();
     return _jsonResponse({
-      'status': 'ok',
+      'status': dbConnected ? 'ok' : 'degraded',
       'service': 'EcoSort AI Backend',
       'version': '0.1.0',
+      'database': {
+        'connected': dbConnected,
+      },
     });
   });
 
@@ -57,8 +61,9 @@ Router buildRouter(WasteDataService service) {
   // Returns the full list of waste categories (e.g. Recyclable, Kitchen Waste,
   // Hazardous, Other) with their descriptions and disposal tips.
   // ---------------------------------------------------------------------------
-  router.get('/categories', (Request request) {
-    return _jsonResponse(service.categories.map((item) => item.toJson()).toList());
+  router.get('/categories', (Request request) async {
+    final categories = await service.getCategories();
+    return _jsonResponse(categories.map((item) => item.toJson()).toList());
   });
 
   // ---------------------------------------------------------------------------
@@ -79,7 +84,8 @@ Router buildRouter(WasteDataService service) {
       return _jsonResponse({'error': 'itemName is required.'}, statusCode: 400);
     }
 
-    return _jsonResponse(service.classify(itemName).toJson());
+    final result = await service.classify(itemName);
+    return _jsonResponse(result.toJson());
   });
 
   // ---------------------------------------------------------------------------
@@ -87,8 +93,9 @@ Router buildRouter(WasteDataService service) {
   // Returns a list of suggested eco-friendly actions that users can take to
   // reduce waste and live more sustainably.
   // ---------------------------------------------------------------------------
-  router.get('/eco-actions', (Request request) {
-    return _jsonResponse(service.ecoActions.map((item) => item.toJson()).toList());
+  router.get('/eco-actions', (Request request) async {
+    final actions = await service.getEcoActions();
+    return _jsonResponse(actions.map((item) => item.toJson()).toList());
   });
 
   // ---------------------------------------------------------------------------
@@ -96,8 +103,9 @@ Router buildRouter(WasteDataService service) {
   // Returns the available rewards that users can redeem using points earned
   // through waste-sorting activities.
   // ---------------------------------------------------------------------------
-  router.get('/rewards', (Request request) {
-    return _jsonResponse(service.rewards.map((item) => item.toJson()).toList());
+  router.get('/rewards', (Request request) async {
+    final rewards = await service.getRewards();
+    return _jsonResponse(rewards.map((item) => item.toJson()).toList());
   });
 
   // ---------------------------------------------------------------------------
@@ -105,16 +113,18 @@ Router buildRouter(WasteDataService service) {
   // Returns community forum posts where users can discuss waste sorting and
   // environmental topics.
   // ---------------------------------------------------------------------------
-  router.get('/forum-posts', (Request request) {
-    return _jsonResponse(service.forumPosts.map((item) => item.toJson()).toList());
+  router.get('/forum-posts', (Request request) async {
+    final posts = await service.getForumPosts();
+    return _jsonResponse(posts.map((item) => item.toJson()).toList());
   });
 
   // ---------------------------------------------------------------------------
   // GET /messages
   // Returns the user's message threads for in-app communication.
   // ---------------------------------------------------------------------------
-  router.get('/messages', (Request request) {
-    return _jsonResponse(service.messages.map((item) => item.toJson()).toList());
+  router.get('/messages', (Request request) async {
+    final messages = await service.getMessages();
+    return _jsonResponse(messages.map((item) => item.toJson()).toList());
   });
 
   // ---------------------------------------------------------------------------
@@ -122,8 +132,9 @@ Router buildRouter(WasteDataService service) {
   // Returns the current user's profile information including points, badges,
   // and activity history.
   // ---------------------------------------------------------------------------
-  router.get('/profile', (Request request) {
-    return _jsonResponse(service.profile.toJson());
+  router.get('/profile', (Request request) async {
+    final profile = await service.getProfile();
+    return _jsonResponse(profile.toJson());
   });
 
   // ---------------------------------------------------------------------------
