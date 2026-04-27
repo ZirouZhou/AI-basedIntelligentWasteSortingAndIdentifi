@@ -2,7 +2,8 @@ param(
   [string]$EmulatorName = "Pixel_10_Pro_XL",
   [int]$BackendPort = 8080,
   [switch]$SkipRun,
-  [switch]$HideEmulator
+  [switch]$HideEmulator,
+  [switch]$ForceCompatibilityGpu
 )
 
 $ErrorActionPreference = "Stop"
@@ -228,6 +229,37 @@ function Wait-ForBootCompleted {
   return $false
 }
 
+function Start-AndroidEmulatorProcess {
+  param(
+    [string]$EmulatorPath,
+    [string]$EmulatorName,
+    [string]$OutLogPath,
+    [string]$ErrLogPath,
+    [switch]$HideWindow,
+    [switch]$CompatibilityGpu
+  )
+
+  $arguments = @("-avd", $EmulatorName, "-no-snapshot-load")
+  if ($CompatibilityGpu) {
+    # Fallback mode for hosts where the default renderer is unstable.
+    $arguments += @("-gpu", "swiftshader_indirect", "-no-snapshot-save")
+  }
+
+  $startProcessArgs = @{
+    FilePath = $EmulatorPath
+    ArgumentList = $arguments
+    RedirectStandardOutput = $OutLogPath
+    RedirectStandardError = $ErrLogPath
+    PassThru = $true
+  }
+
+  if ($HideWindow) {
+    $startProcessArgs.WindowStyle = "Hidden"
+  }
+
+  return Start-Process @startProcessArgs
+}
+
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backendDir = Join-Path $repoRoot "backend"
 $frontendDir = Join-Path $repoRoot "frontend"
@@ -289,28 +321,60 @@ try {
   & $adbPath kill-server | Out-Null
   & $adbPath start-server | Out-Null
 
+  $emulatorOutLog = Join-Path $logDir "emulator.out.log"
+  $emulatorErrLog = Join-Path $logDir "emulator.err.log"
+  $emulatorProcess = $null
   $deviceId = Get-FirstOnlineEmulator -AdbPath $adbPath
   if (-not $deviceId) {
     Stop-EmulatorProcesses
     Remove-OfflineEmulator -AdbPath $adbPath
-    Write-Step "Launching Android emulator: $EmulatorName"
-    $emulatorOutLog = Join-Path $logDir "emulator.out.log"
-    $emulatorErrLog = Join-Path $logDir "emulator.err.log"
-    $startProcessArgs = @{
-      FilePath = $emulatorPath
-      ArgumentList = @("-avd", $EmulatorName, "-no-snapshot-load")
-      RedirectStandardOutput = $emulatorOutLog
-      RedirectStandardError = $emulatorErrLog
-    }
-    if ($HideEmulator) {
-      $startProcessArgs.WindowStyle = "Hidden"
-    }
-    Start-Process @startProcessArgs | Out-Null
+    Write-Step "Launching Android emulator: $EmulatorName (compatibility GPU mode: $([bool]$ForceCompatibilityGpu))"
+    $emulatorProcess = Start-AndroidEmulatorProcess `
+      -EmulatorPath $emulatorPath `
+      -EmulatorName $EmulatorName `
+      -OutLogPath $emulatorOutLog `
+      -ErrLogPath $emulatorErrLog `
+      -HideWindow:$HideEmulator `
+      -CompatibilityGpu:$ForceCompatibilityGpu
     $deviceId = Wait-ForEmulatorOnline -AdbPath $adbPath -TimeoutSeconds 300
+
+    if (-not $deviceId) {
+      $offlineId = Get-FirstOfflineEmulator -AdbPath $adbPath
+      if ($offlineId) {
+        Write-Step "Emulator is offline as $offlineId. Restarting adb and retrying detection..."
+        & $adbPath kill-server | Out-Null
+        & $adbPath start-server | Out-Null
+        $deviceId = Wait-ForEmulatorOnline -AdbPath $adbPath -TimeoutSeconds 120
+      }
+    }
+
+    if (-not $deviceId) {
+      $emulatorStillRunning = $false
+      if ($emulatorProcess) {
+        $emulatorStillRunning = [bool](Get-Process -Id $emulatorProcess.Id -ErrorAction SilentlyContinue)
+      }
+
+      if (-not $emulatorStillRunning) {
+        Write-Step "Emulator process exited before adb detected a device. Retrying with compatibility GPU mode..."
+        Stop-EmulatorProcesses
+        & $adbPath kill-server | Out-Null
+        & $adbPath start-server | Out-Null
+
+        $emulatorProcess = Start-AndroidEmulatorProcess `
+          -EmulatorPath $emulatorPath `
+          -EmulatorName $EmulatorName `
+          -OutLogPath $emulatorOutLog `
+          -ErrLogPath $emulatorErrLog `
+          -HideWindow:$HideEmulator `
+          -CompatibilityGpu
+
+        $deviceId = Wait-ForEmulatorOnline -AdbPath $adbPath -TimeoutSeconds 300
+      }
+    }
   }
 
   if (-not $deviceId) {
-    throw "No Android emulator became available. Check logs in $logDir."
+    throw "No Android emulator became available after recovery attempts. Check logs: $emulatorOutLog and $emulatorErrLog"
   }
 
   Write-Step "Waiting for emulator boot completion on $deviceId..."
