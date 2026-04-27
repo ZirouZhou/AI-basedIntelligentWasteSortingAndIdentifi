@@ -284,6 +284,7 @@ class AppUser {
     required this.greenScore,
     required this.totalRecycledKg,
     required this.avatarInitials,
+    this.totalCo2ReductionKg = 0,
   });
 
   final String id;
@@ -294,6 +295,7 @@ class AppUser {
   final int greenScore;
   final double totalRecycledKg;
   final String avatarInitials;
+  final double totalCo2ReductionKg;
 
   /// Serialises this user profile to a JSON-compatible map.
   JsonMap toJson() {
@@ -306,6 +308,208 @@ class AppUser {
       'greenScore': greenScore,
       'totalRecycledKg': totalRecycledKg,
       'avatarInitials': avatarInitials,
+      'totalCo2ReductionKg': totalCo2ReductionKg,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// EcoActionCatalogItem
+// ------------------------------------------------------------------------------------------------
+
+/// A configurable eco behavior type used for carbon-reduction evaluation.
+class EcoActionCatalogItem {
+  const EcoActionCatalogItem({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.unitLabel,
+    required this.co2KgPerUnit,
+    required this.pointsPerUnit,
+    required this.active,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final String unitLabel;
+  final double co2KgPerUnit;
+  final int pointsPerUnit;
+  final bool active;
+
+  JsonMap toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'unitLabel': unitLabel,
+      'co2KgPerUnit': co2KgPerUnit,
+      'pointsPerUnit': pointsPerUnit,
+      'active': active,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// EcoActionRecord
+// ------------------------------------------------------------------------------------------------
+
+/// A completed eco behavior record submitted by the user.
+class EcoActionRecord {
+  const EcoActionRecord({
+    required this.id,
+    required this.userId,
+    required this.catalogActionId,
+    required this.actionTitle,
+    required this.quantity,
+    required this.unitLabel,
+    required this.co2ReductionKg,
+    required this.pointsAwarded,
+    required this.createdAt,
+    this.note,
+  });
+
+  final int id;
+  final String userId;
+  final String catalogActionId;
+  final String actionTitle;
+  final double quantity;
+  final String unitLabel;
+  final double co2ReductionKg;
+  final int pointsAwarded;
+  final String createdAt;
+  final String? note;
+
+  JsonMap toJson() {
+    return {
+      'id': id,
+      'userId': userId,
+      'catalogActionId': catalogActionId,
+      'actionTitle': actionTitle,
+      'quantity': quantity,
+      'unitLabel': unitLabel,
+      'co2ReductionKg': co2ReductionKg,
+      'pointsAwarded': pointsAwarded,
+      'createdAt': createdAt,
+      'note': note,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// EcoActionEvaluationResult
+// ------------------------------------------------------------------------------------------------
+
+/// Result returned after evaluating and storing a user eco action.
+class EcoActionEvaluationResult {
+  const EcoActionEvaluationResult({
+    required this.record,
+    required this.newPointsBalance,
+    required this.totalCo2ReductionKg,
+  });
+
+  final EcoActionRecord record;
+  final int newPointsBalance;
+  final double totalCo2ReductionKg;
+
+  JsonMap toJson() {
+    return {
+      'record': record.toJson(),
+      'newPointsBalance': newPointsBalance,
+      'totalCo2ReductionKg': totalCo2ReductionKg,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Badge
+// ------------------------------------------------------------------------------------------------
+
+/// Badge that can be redeemed by spending accumulated points.
+class Badge {
+  const Badge({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.requiredPoints,
+    required this.icon,
+    required this.redeemed,
+    required this.redeemable,
+    this.redeemedAt,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final int requiredPoints;
+  final String icon;
+  final bool redeemed;
+  final bool redeemable;
+  final String? redeemedAt;
+
+  JsonMap toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'requiredPoints': requiredPoints,
+      'icon': icon,
+      'redeemed': redeemed,
+      'redeemable': redeemable,
+      'redeemedAt': redeemedAt,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// BadgeRedeemResult
+// ------------------------------------------------------------------------------------------------
+
+/// Result returned after redeeming a badge.
+class BadgeRedeemResult {
+  const BadgeRedeemResult({
+    required this.badge,
+    required this.newPointsBalance,
+  });
+
+  final Badge badge;
+  final int newPointsBalance;
+
+  JsonMap toJson() {
+    return {
+      'badge': badge.toJson(),
+      'newPointsBalance': newPointsBalance,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// EcoDashboard
+// ------------------------------------------------------------------------------------------------
+
+/// Dashboard summary for eco assessment and rewards module.
+class EcoDashboard {
+  const EcoDashboard({
+    required this.userId,
+    required this.currentPoints,
+    required this.totalCo2ReductionKg,
+    required this.totalEvaluations,
+    required this.badgesRedeemed,
+  });
+
+  final String userId;
+  final int currentPoints;
+  final double totalCo2ReductionKg;
+  final int totalEvaluations;
+  final int badgesRedeemed;
+
+  JsonMap toJson() {
+    return {
+      'userId': userId,
+      'currentPoints': currentPoints,
+      'totalCo2ReductionKg': totalCo2ReductionKg,
+      'totalEvaluations': totalEvaluations,
+      'badgesRedeemed': badgesRedeemed,
     };
   }
 }

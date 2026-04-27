@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/models/waste_category.dart';
 import '../../core/services/api_client.dart';
@@ -15,9 +16,11 @@ class ClassifyPage extends StatefulWidget {
 class _ClassifyPageState extends State<ClassifyPage> {
   final _apiClient = ApiClient();
   final _controller = TextEditingController(text: 'Plastic bottle');
+  final _imagePicker = ImagePicker();
   ClassificationResult? _result = MockData.demoClassification;
   bool _isClassifying = false;
   String? _statusMessage;
+  String? _selectedImageName;
 
   @override
   void dispose() {
@@ -59,6 +62,65 @@ class _ClassifyPageState extends State<ClassifyPage> {
     }
   }
 
+  Future<void> _classifyFromCamera() async {
+    await _classifyFromSource(ImageSource.camera);
+  }
+
+  Future<void> _classifyFromGallery() async {
+    await _classifyFromSource(ImageSource.gallery);
+  }
+
+  Future<void> _classifyFromSource(ImageSource source) async {
+    setState(() {
+      _isClassifying = true;
+      _statusMessage = null;
+    });
+
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+      if (picked == null) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isClassifying = false;
+          _statusMessage = 'No image selected.';
+        });
+        return;
+      }
+
+      final bytes = await picked.readAsBytes();
+      final result = await _apiClient.classifyWasteImage(
+        imageBytes: bytes,
+        fileName: picked.name,
+        submittedBy: 'u1',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _selectedImageName = picked.name;
+        _result = result;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _statusMessage =
+            'Image recognition failed. Please check backend and Aliyun credentials.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isClassifying = false);
+      }
+    }
+  }
+
   ClassificationResult _classifyLocally(String itemName) {
     final lower = itemName.toLowerCase();
     final category = lower.contains('battery') || lower.contains('medicine')
@@ -92,7 +154,7 @@ class _ClassifyPageState extends State<ClassifyPage> {
         ),
         const SizedBox(height: 20),
         Container(
-          height: 220,
+          height: 250,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(32),
             color: Colors.white,
@@ -114,11 +176,29 @@ class _ClassifyPageState extends State<ClassifyPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              Text('Image upload placeholder', style: textTheme.titleMedium),
+              Text('Image Classification', style: textTheme.titleMedium),
               const SizedBox(height: 6),
               Text(
-                'Connect camera or gallery in the next development step.',
+                'Take a photo or pick one from gallery.',
                 style: textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                alignment: WrapAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _isClassifying ? null : _classifyFromCamera,
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: const Text('Camera'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _isClassifying ? null : _classifyFromGallery,
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: const Text('Gallery'),
+                  ),
+                ],
               ),
             ],
           ),
@@ -156,6 +236,13 @@ class _ClassifyPageState extends State<ClassifyPage> {
           Text(
             _statusMessage!,
             style: textTheme.bodyMedium?.copyWith(color: Colors.orange[800]),
+          ),
+        ],
+        if (_selectedImageName != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Last image: $_selectedImageName',
+            style: textTheme.bodySmall,
           ),
         ],
         const SizedBox(height: 24),

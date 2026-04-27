@@ -33,4 +33,20 @@ class AppConfig {
   /// When `true`, [ApiClient] failures will be silently caught and replaced
   /// with locally computed results so the UI never appears broken.
   static const useMockFallback = true;
+
+  /// AMap weather key used by the home page weather widget.
+  static const amapWeatherKey = String.fromEnvironment(
+    'AMAP_WEATHER_KEY',
+    defaultValue: '6cf5aee5343c38e486faa1a62db49495',
+  );
+
+  /// Country name shown in UI for weather card.
+  static const ukWeatherCountryLabel = 'United Kingdom';
+
+  /// AMap weather API city parameter for UK.
+  ///
+  /// Note: AMap weather API is mainly designed for Chinese administrative
+  /// regions. UK requests may return empty `lives`, in which case the UI shows
+  /// a graceful "no data" state.
+  static const ukWeatherCityQuery = '英国';
 }

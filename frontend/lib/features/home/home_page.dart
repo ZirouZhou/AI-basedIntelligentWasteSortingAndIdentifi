@@ -1,28 +1,43 @@
-// ------------------------------------------------------------------------------------------------
-// EcoSort AI Flutter App — Home Page
-// ------------------------------------------------------------------------------------------------
-//
-// [HomePage] is the default landing screen of EcoSort AI. It provides a
-// dashboard-style overview with:
-//   • App branding and tagline
-//   • A motivational eco-tip card
-//   • Green score and recycling metric cards
-//   • A sorting guide showing the four waste categories
-//
-// All data is sourced from [MockData.categories].
-// ------------------------------------------------------------------------------------------------
-
 import 'package:flutter/material.dart';
 
+import '../../core/config/app_config.dart';
+import '../../core/models/weather_info.dart';
+import '../../core/services/api_client.dart';
 import '../../core/state/mock_data.dart';
 import '../../core/theme/app_theme.dart';
 
-/// The landing / dashboard page of EcoSort AI.
+/// Home page dashboard.
 ///
-/// Displays the current green score, recycling progress, and a quick
-/// reference guide to the four waste-sorting categories.
-class HomePage extends StatelessWidget {
+/// Adds a UK weather section powered by AMap weather API.
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  late final ApiClient _apiClient;
+  Future<WeatherInfo>? _weatherFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _apiClient = ApiClient();
+    _weatherFuture = _apiClient.fetchUkLiveWeather();
+  }
+
+  @override
+  void dispose() {
+    _apiClient.dispose();
+    super.dispose();
+  }
+
+  void _refreshWeather() {
+    setState(() {
+      _weatherFuture = _apiClient.fetchUkLiveWeather();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,16 +46,13 @@ class HomePage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
       children: [
-        // App title
         Text('EcoSort AI', style: textTheme.headlineLarge),
         const SizedBox(height: 8),
-        // Subtitle / tagline
         Text(
           'Identify waste instantly, build greener habits, and connect with a low-carbon community.',
           style: textTheme.bodyLarge,
         ),
         const SizedBox(height: 20),
-        // Eco motivational banner
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
@@ -69,7 +81,16 @@ class HomePage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        // Metric summary cards
+        FutureBuilder<WeatherInfo>(
+          future: _weatherFuture,
+          builder: (context, snapshot) {
+            return _WeatherCard(
+              snapshot: snapshot,
+              onRefresh: _refreshWeather,
+            );
+          },
+        ),
+        const SizedBox(height: 20),
         const Row(
           children: [
             Expanded(
@@ -90,10 +111,8 @@ class HomePage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 24),
-        // Sorting guide section header
         Text('Sorting Guide', style: textTheme.titleLarge),
         const SizedBox(height: 12),
-        // Render each waste category as a card
         ...MockData.categories.map(
           (category) => Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -117,12 +136,180 @@ class HomePage extends StatelessWidget {
   }
 }
 
-/// A small card displaying a single metric (Green Score or Recycled weight)
-/// on the Home page dashboard.
-///
-/// * [label] – metric name
-/// * [value] – formatted metric value
-/// * [icon]  – icon shown above the value
+class _WeatherCard extends StatelessWidget {
+  const _WeatherCard({
+    required this.snapshot,
+    required this.onRefresh,
+  });
+
+  final AsyncSnapshot<WeatherInfo> snapshot;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Loading live weather for ${AppConfig.ukWeatherCountryLabel}...',
+                  style: textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (snapshot.hasError) {
+      final message = snapshot.error is WeatherNoDataException
+          ? (snapshot.error as WeatherNoDataException).message
+          : 'Unable to load weather right now.';
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.cloud_off, color: Color(0xFF8A5A2B)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${AppConfig.ukWeatherCountryLabel} Live Weather',
+                      style: textTheme.titleMedium,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: onRefresh,
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Refresh weather',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(message, style: textTheme.bodyMedium),
+              const SizedBox(height: 4),
+              Text(
+                'Source: AMap Weather API',
+                style: textTheme.bodySmall?.copyWith(color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final weather = snapshot.data;
+    if (weather == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E5C7B), Color(0xFF3E9FC6)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.cloud, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${AppConfig.ukWeatherCountryLabel} Live Weather',
+                    style: textTheme.titleMedium?.copyWith(color: Colors.white),
+                  ),
+                ),
+                IconButton(
+                  onPressed: onRefresh,
+                  icon: const Icon(Icons.refresh, color: Colors.white),
+                  tooltip: 'Refresh weather',
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              weather.locationName,
+              style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${weather.temperatureCelsius}°C  •  ${weather.weather}',
+              style: textTheme.headlineMedium?.copyWith(color: Colors.white),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                _WeatherChip(label: 'Humidity', value: '${weather.humidityPercent}%'),
+                _WeatherChip(
+                  label: 'Wind',
+                  value: '${weather.windDirection} ${weather.windPower}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Reported at ${weather.reportTime} (AMap)',
+              style: textTheme.bodySmall?.copyWith(color: Colors.white70),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeatherChip extends StatelessWidget {
+  const _WeatherChip({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        '$label: $value',
+        style: textTheme.bodySmall?.copyWith(color: Colors.white),
+      ),
+    );
+  }
+}
+
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.label,

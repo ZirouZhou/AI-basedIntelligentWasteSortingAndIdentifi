@@ -28,6 +28,8 @@
 - [API Reference](#-api-reference)
 - [Project Structure](#-project-structure)
 - [Roadmap](#-roadmap)
+- [Environment Variables](#-environment-variables)
+- [Database Schema](#-database-schema)
 - [Contributing](#-contributing)
 - [License](#-license)
 
@@ -184,6 +186,16 @@ dart pub get
 dart run bin/server.dart
 ```
 
+If you want to enable Alibaba Cloud image classification, set credentials in
+environment variables before starting:
+
+```powershell
+$env:ALIYUN_ACCESS_KEY_ID="your_access_key_id"
+$env:ALIYUN_ACCESS_KEY_SECRET="your_access_key_secret"
+$env:ALIYUN_REGION_ID="cn-shanghai"
+dart run bin/server.dart
+```
+
 The API server will start at **`http://localhost:8080`**. You should see a confirmation message in the terminal.
 
 4. **Verify the server is running:**
@@ -251,6 +263,8 @@ http://localhost:8080
 | `GET` | `/health` | Health check | `{ status, service, version }` |
 | `GET` | `/categories` | List all waste categories | `[{ id, title, description, binColor, examples, recyclingTips }]` |
 | `POST` | `/classify` | Classify a waste item by name | `{ itemName, category, confidence, suggestions }` |
+| `POST` | `/classify-image` | Classify waste from base64 image via Aliyun model | `{ itemName, category, confidence, suggestions }` |
+| `GET` | `/vision-logs` | Get latest image-recognition logs | `[{ requestId, imageUrl, elements, rawPayload }]` |
 | `GET` | `/eco-actions` | List eco-friendly actions | `[{ id, title, impact, points, completed }]` |
 | `GET` | `/rewards` | List available rewards | `[{ id, title, description, requiredPoints, redeemed }]` |
 | `GET` | `/forum-posts` | List community forum posts | `[{ id, author, title, content, tag, likes, replies, createdAt }]` |
@@ -295,6 +309,63 @@ curl -X POST http://localhost:8080/classify \
 
 ```bash
 curl http://localhost:8080/categories
+```
+
+### Example: Classify an Image
+
+```bash
+curl -X POST http://localhost:8080/classify-image \
+  -H "Content-Type: application/json" \
+  -d "{\"fileName\":\"bottle.jpg\",\"imageBase64\":\"<BASE64_IMAGE_DATA>\",\"submittedBy\":\"u1\"}"
+```
+
+---
+
+## Environment Variables
+
+### Backend (MySQL)
+
+- `DB_HOST` (default: `localhost`)
+- `DB_PORT` (default: `3308`)
+- `DB_USER` (default: `root`)
+- `DB_PASSWORD` (default: `123456`)
+- `DB_NAME` (default: `20260419_ai_intelligent_waste_sorting_identification_app`)
+- `DB_CHARSET` (default: `utf8`)
+
+### Backend (Aliyun Vision)
+
+- `ALIYUN_ACCESS_KEY_ID` (required for image classification)
+- `ALIYUN_ACCESS_KEY_SECRET` (required for image classification)
+- `ALIYUN_REGION_ID` (optional, default: `cn-shanghai`)
+
+### Frontend
+
+- `API_BASE_URL` (default Android emulator: `http://10.0.2.2:8080`)
+
+---
+
+## Database Schema
+
+The backend automatically creates all tables at startup.  
+Image recognition logs are stored in `vision_classification_logs`:
+
+```sql
+CREATE TABLE IF NOT EXISTS vision_classification_logs (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  submitted_by VARCHAR(128) NULL,
+  source_file_name VARCHAR(255) NOT NULL,
+  image_url TEXT NOT NULL,
+  request_id VARCHAR(128) NOT NULL,
+  category_label VARCHAR(128) NOT NULL,
+  category_score DOUBLE NOT NULL,
+  rubbish_label VARCHAR(255) NOT NULL,
+  rubbish_score DOUBLE NOT NULL,
+  mapped_category_id VARCHAR(32) NOT NULL,
+  mapped_category_title VARCHAR(128) NOT NULL,
+  raw_response_json LONGTEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_vision_logs_created (created_at DESC)
+);
 ```
 
 ---

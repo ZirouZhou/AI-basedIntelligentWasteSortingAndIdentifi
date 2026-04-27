@@ -1,27 +1,32 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:mysql1/mysql1.dart';
 
+import '../config/aliyun_config.dart';
 import '../config/database_config.dart';
 import '../models/app_models.dart';
+import '../models/vision_models.dart';
+import 'aliyun_vision_client.dart';
 import 'waste_data_service.dart';
 
 /// MySQL-backed implementation of [WasteDataService].
-///
-/// This service:
-/// - creates the target database if needed
-/// - creates all required tables if missing
-/// - inserts seed data when tables are empty
-/// - serves all API data from MySQL
 class MySqlWasteDataService implements WasteDataService {
   MySqlWasteDataService._({
     required DatabaseConfig config,
     required MySqlConnection connection,
+    required AliyunConfig aliyunConfig,
   }) : _config = config,
-       _connection = connection;
+       _connection = connection,
+       _aliyunClient = aliyunConfig.isConfigured
+           ? AliyunVisionClient(aliyunConfig)
+           : null;
 
   final DatabaseConfig _config;
   final MySqlConnection _connection;
+  final AliyunVisionClient? _aliyunClient;
+
+  static const _defaultUserId = 'u1';
 
   /// Initializes schema/tables/seed-data and returns a ready service instance.
   static Future<MySqlWasteDataService> initialize(DatabaseConfig config) async {
@@ -33,6 +38,7 @@ class MySqlWasteDataService implements WasteDataService {
     final service = MySqlWasteDataService._(
       config: config,
       connection: connection,
+      aliyunConfig: AliyunConfig.fromEnvironment(),
     );
     await service._createTablesIfNeeded();
     await service._seedDataIfNeeded();
@@ -117,9 +123,149 @@ class MySqlWasteDataService implements WasteDataService {
         level VARCHAR(128) NOT NULL,
         green_score INT NOT NULL,
         total_recycled_kg DOUBLE NOT NULL,
-        avatar_initials VARCHAR(16) NOT NULL
+        avatar_initials VARCHAR(16) NOT NULL,
+        total_co2_reduction_kg DOUBLE NOT NULL DEFAULT 0
       ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
     ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS eco_action_catalog (
+        id VARCHAR(32) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        unit_label VARCHAR(64) NOT NULL,
+        co2_kg_per_unit DOUBLE NOT NULL,
+        points_per_unit INT NOT NULL,
+        active TINYINT(1) NOT NULL DEFAULT 1
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS user_eco_action_records (
+        id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        user_id VARCHAR(32) NOT NULL,
+        catalog_action_id VARCHAR(32) NOT NULL,
+        quantity DOUBLE NOT NULL,
+        co2_reduction_kg DOUBLE NOT NULL,
+        points_awarded INT NOT NULL,
+        note VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_action_record_user_time (user_id, created_at DESC),
+        CONSTRAINT fk_action_record_user
+          FOREIGN KEY (user_id) REFERENCES app_users(id),
+        CONSTRAINT fk_action_record_catalog
+          FOREIGN KEY (catalog_action_id) REFERENCES eco_action_catalog(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS badges (
+        id VARCHAR(32) PRIMARY KEY,
+        title VARCHAR(128) NOT NULL,
+        description TEXT NOT NULL,
+        required_points INT NOT NULL,
+        icon VARCHAR(64) NOT NULL,
+        active TINYINT(1) NOT NULL DEFAULT 1
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS user_badges (
+        id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        user_id VARCHAR(32) NOT NULL,
+        badge_id VARCHAR(32) NOT NULL,
+        redeemed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_user_badge (user_id, badge_id),
+        CONSTRAINT fk_user_badges_user
+          FOREIGN KEY (user_id) REFERENCES app_users(id),
+        CONSTRAINT fk_user_badges_badge
+          FOREIGN KEY (badge_id) REFERENCES badges(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS point_transactions (
+        id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        user_id VARCHAR(32) NOT NULL,
+        change_amount INT NOT NULL,
+        transaction_type VARCHAR(32) NOT NULL,
+        related_id VARCHAR(64) NULL,
+        remark VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_point_tx_user_time (user_id, created_at DESC),
+        CONSTRAINT fk_point_tx_user
+          FOREIGN KEY (user_id) REFERENCES app_users(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _ensureSchemaUpgrades();
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS vision_classification_logs (
+        id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        submitted_by VARCHAR(128) NULL,
+        source_file_name VARCHAR(255) NOT NULL,
+        image_url TEXT NOT NULL,
+        request_id VARCHAR(128) NOT NULL,
+        category_label VARCHAR(128) NOT NULL,
+        category_score DOUBLE NOT NULL,
+        rubbish_label VARCHAR(255) NOT NULL,
+        rubbish_score DOUBLE NOT NULL,
+        mapped_category_id VARCHAR(32) NOT NULL,
+        mapped_category_title VARCHAR(128) NOT NULL,
+        raw_response_json LONGTEXT NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_vision_logs_created (created_at DESC)
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+  }
+
+  Future<void> _ensureSchemaUpgrades() async {
+    await _addColumnIfMissing(
+      table: 'app_users',
+      column: 'total_co2_reduction_kg',
+      ddl: 'ALTER TABLE app_users ADD COLUMN total_co2_reduction_kg DOUBLE NOT NULL DEFAULT 0',
+    );
+
+    await _addColumnIfMissing(
+      table: 'eco_action_catalog',
+      column: 'active',
+      ddl: 'ALTER TABLE eco_action_catalog ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1',
+    );
+
+    await _addColumnIfMissing(
+      table: 'badges',
+      column: 'active',
+      ddl: 'ALTER TABLE badges ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1',
+    );
+  }
+
+  Future<void> _addColumnIfMissing({
+    required String table,
+    required String column,
+    required String ddl,
+  }) async {
+    final exists = await _columnExists(table: table, column: column);
+    if (!exists) {
+      await _connection.query(ddl);
+    }
+  }
+
+  Future<bool> _columnExists({
+    required String table,
+    required String column,
+  }) async {
+    final result = await _connection.query(
+      '''
+      SELECT COUNT(*) AS count
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ?
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+      ''',
+      [_config.database, table, column],
+    );
+    return _readInt(result.first.fields['count']) > 0;
   }
 
   Future<void> _seedDataIfNeeded() async {
@@ -129,6 +275,8 @@ class MySqlWasteDataService implements WasteDataService {
     await _seedForumPostsIfNeeded();
     await _seedMessagesIfNeeded();
     await _seedProfileIfNeeded();
+    await _seedEcoActionCatalogIfNeeded();
+    await _seedBadgesIfNeeded();
   }
 
   Future<void> _seedCategoriesIfNeeded() async {
@@ -207,7 +355,9 @@ class MySqlWasteDataService implements WasteDataService {
   }
 
   Future<void> _seedEcoActionsIfNeeded() async {
-    final result = await _connection.query('SELECT COUNT(*) AS count FROM eco_actions');
+    final result = await _connection.query(
+      'SELECT COUNT(*) AS count FROM eco_actions',
+    );
     final count = _readInt(result.first.fields['count']);
     if (count > 0) {
       return;
@@ -410,7 +560,7 @@ class MySqlWasteDataService implements WasteDataService {
     }
 
     const user = AppUser(
-      id: 'u1',
+      id: _defaultUserId,
       name: 'Alex Green',
       email: 'alex.green@example.com',
       city: 'Shanghai',
@@ -418,13 +568,14 @@ class MySqlWasteDataService implements WasteDataService {
       greenScore: 836,
       totalRecycledKg: 48.5,
       avatarInitials: 'AG',
+      totalCo2ReductionKg: 12.4,
     );
 
     await _connection.query(
       '''
       INSERT INTO app_users (
-        id, name, email, city, level, green_score, total_recycled_kg, avatar_initials
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, name, email, city, level, green_score, total_recycled_kg, avatar_initials, total_co2_reduction_kg
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ''',
       [
         user.id,
@@ -435,8 +586,139 @@ class MySqlWasteDataService implements WasteDataService {
         user.greenScore,
         user.totalRecycledKg,
         user.avatarInitials,
+        user.totalCo2ReductionKg,
       ],
     );
+  }
+
+  Future<void> _seedEcoActionCatalogIfNeeded() async {
+    final result = await _connection.query(
+      'SELECT COUNT(*) AS count FROM eco_action_catalog',
+    );
+    final count = _readInt(result.first.fields['count']);
+    if (count > 0) {
+      return;
+    }
+
+    const data = [
+      EcoActionCatalogItem(
+        id: 'reuse_bag',
+        title: 'Use Reusable Shopping Bag',
+        description: 'Replace single-use plastic bags with reusable bags.',
+        unitLabel: 'times',
+        co2KgPerUnit: 0.06,
+        pointsPerUnit: 3,
+        active: true,
+      ),
+      EcoActionCatalogItem(
+        id: 'bus_commute',
+        title: 'Take Bus Instead of Car',
+        description: 'Choose public transportation for daily commute.',
+        unitLabel: 'km',
+        co2KgPerUnit: 0.14,
+        pointsPerUnit: 2,
+        active: true,
+      ),
+      EcoActionCatalogItem(
+        id: 'recycle_paper',
+        title: 'Recycle Paper Waste',
+        description: 'Sort and recycle clean paper products.',
+        unitLabel: 'kg',
+        co2KgPerUnit: 0.9,
+        pointsPerUnit: 8,
+        active: true,
+      ),
+      EcoActionCatalogItem(
+        id: 'recycle_plastic',
+        title: 'Recycle Plastic Packaging',
+        description: 'Clean and place recyclable plastic in correct bin.',
+        unitLabel: 'kg',
+        co2KgPerUnit: 1.7,
+        pointsPerUnit: 12,
+        active: true,
+      ),
+      EcoActionCatalogItem(
+        id: 'food_waste_compost',
+        title: 'Compost Food Waste',
+        description: 'Separate kitchen waste for composting.',
+        unitLabel: 'kg',
+        co2KgPerUnit: 0.45,
+        pointsPerUnit: 6,
+        active: true,
+      ),
+    ];
+
+    for (final item in data) {
+      await _connection.query(
+        '''
+        INSERT INTO eco_action_catalog (
+          id, title, description, unit_label, co2_kg_per_unit, points_per_unit, active
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''',
+        [
+          item.id,
+          item.title,
+          item.description,
+          item.unitLabel,
+          item.co2KgPerUnit,
+          item.pointsPerUnit,
+          item.active ? 1 : 0,
+        ],
+      );
+    }
+  }
+
+  Future<void> _seedBadgesIfNeeded() async {
+    final result = await _connection.query('SELECT COUNT(*) AS count FROM badges');
+    final count = _readInt(result.first.fields['count']);
+    if (count > 0) {
+      return;
+    }
+
+    const data = [
+      Badge(
+        id: 'bronze_guardian',
+        title: 'Bronze Carbon Guardian',
+        description: 'Awarded to users reaching 100 points.',
+        requiredPoints: 100,
+        icon: 'B',
+        redeemed: false,
+        redeemable: false,
+      ),
+      Badge(
+        id: 'silver_guardian',
+        title: 'Silver Carbon Guardian',
+        description: 'Awarded to users reaching 250 points.',
+        requiredPoints: 250,
+        icon: 'S',
+        redeemed: false,
+        redeemable: false,
+      ),
+      Badge(
+        id: 'gold_guardian',
+        title: 'Gold Carbon Guardian',
+        description: 'Awarded to users reaching 500 points.',
+        requiredPoints: 500,
+        icon: 'G',
+        redeemed: false,
+        redeemable: false,
+      ),
+    ];
+
+    for (final item in data) {
+      await _connection.query(
+        'INSERT INTO badges (id, title, description, required_points, icon, active) '
+        'VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          item.id,
+          item.title,
+          item.description,
+          item.requiredPoints,
+          item.icon,
+          1,
+        ],
+      );
+    }
   }
 
   @override
@@ -445,7 +727,6 @@ class MySqlWasteDataService implements WasteDataService {
       'SELECT id, title, description, bin_color, examples_json, recycling_tips_json '
       'FROM waste_categories ORDER BY id',
     );
-
     return result.map(_toWasteCategory).toList(growable: false);
   }
 
@@ -531,24 +812,315 @@ class MySqlWasteDataService implements WasteDataService {
 
   @override
   Future<AppUser> getProfile() async {
-    final result = await _connection.query(
-      'SELECT id, name, email, city, level, green_score, total_recycled_kg, avatar_initials '
-      'FROM app_users ORDER BY id LIMIT 1',
-    );
-    if (result.isEmpty) {
+    final user = await _getUserById(_defaultUserId);
+    if (user == null) {
       throw StateError('No user profile data found in app_users.');
     }
+    return user;
+  }
 
-    final row = result.first;
-    return AppUser(
-      id: row[0] as String,
-      name: row[1] as String,
-      email: row[2] as String,
-      city: row[3] as String,
-      level: row[4] as String,
-      greenScore: _readInt(row[5]),
-      totalRecycledKg: _readDouble(row[6]),
-      avatarInitials: row[7] as String,
+  @override
+  Future<List<EcoActionCatalogItem>> getEcoActionCatalog() async {
+    final result = await _connection.query(
+      '''
+      SELECT id, title, description, unit_label, co2_kg_per_unit, points_per_unit, active
+      FROM eco_action_catalog
+      WHERE active = 1
+      ORDER BY id
+      ''',
+    );
+
+    return result
+        .map(
+          (row) => EcoActionCatalogItem(
+            id: row[0] as String,
+            title: _readText(row[1]),
+            description: _readText(row[2]),
+            unitLabel: _readText(row[3]),
+            co2KgPerUnit: _readDouble(row[4]),
+            pointsPerUnit: _readInt(row[5]),
+            active: _readBool(row[6]),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<EcoActionRecord>> getEcoActionHistory({
+    required String userId,
+    int limit = 20,
+  }) async {
+    final safeLimit = limit.clamp(1, 200);
+    final result = await _connection.query(
+      '''
+      SELECT
+        r.id,
+        r.user_id,
+        r.catalog_action_id,
+        c.title,
+        r.quantity,
+        c.unit_label,
+        r.co2_reduction_kg,
+        r.points_awarded,
+        DATE_FORMAT(r.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+        r.note
+      FROM user_eco_action_records r
+      INNER JOIN eco_action_catalog c ON c.id = r.catalog_action_id
+      WHERE r.user_id = ?
+      ORDER BY r.created_at DESC
+      LIMIT ?
+      ''',
+      [userId, safeLimit],
+    );
+
+    return result
+        .map(
+          (row) => EcoActionRecord(
+            id: _readInt(row[0]),
+            userId: row[1] as String,
+            catalogActionId: row[2] as String,
+            actionTitle: row[3] as String,
+            quantity: _readDouble(row[4]),
+            unitLabel: row[5] as String,
+            co2ReductionKg: _readDouble(row[6]),
+            pointsAwarded: _readInt(row[7]),
+            createdAt: row[8] as String,
+            note: row[9] as String?,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<EcoActionEvaluationResult> evaluateEcoAction({
+    required String userId,
+    required String catalogActionId,
+    required double quantity,
+    String? note,
+  }) async {
+    if (quantity <= 0) {
+      throw StateError('quantity must be greater than 0.');
+    }
+
+    final user = await _getUserById(userId);
+    if (user == null) {
+      throw StateError('User not found: $userId');
+    }
+
+    final catalogResult = await _connection.query(
+      '''
+      SELECT id, title, unit_label, co2_kg_per_unit, points_per_unit, active
+      FROM eco_action_catalog
+      WHERE id = ?
+      LIMIT 1
+      ''',
+      [catalogActionId],
+    );
+    if (catalogResult.isEmpty) {
+      throw StateError('Eco action type not found: $catalogActionId');
+    }
+    final catalogRow = catalogResult.first;
+    final isActive = _readBool(catalogRow[5]);
+    if (!isActive) {
+      throw StateError('Eco action type is inactive: $catalogActionId');
+    }
+
+    final title = _readText(catalogRow[1]);
+    final co2KgPerUnit = _readDouble(catalogRow[3]);
+    final pointsPerUnit = _readInt(catalogRow[4]);
+
+    final co2ReductionKg = _round2(quantity * co2KgPerUnit);
+    final pointsAwarded = _roundToInt(quantity * pointsPerUnit);
+
+    await _connection.transaction((tx) async {
+      await tx.query(
+        '''
+        INSERT INTO user_eco_action_records (
+          user_id, catalog_action_id, quantity, co2_reduction_kg, points_awarded, note
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ''',
+        [
+          userId,
+          catalogActionId,
+          quantity,
+          co2ReductionKg,
+          pointsAwarded,
+          note?.trim().isEmpty ?? true ? null : note!.trim(),
+        ],
+      );
+
+      await tx.query(
+        '''
+        UPDATE app_users
+        SET
+          green_score = green_score + ?,
+          total_co2_reduction_kg = total_co2_reduction_kg + ?
+        WHERE id = ?
+        ''',
+        [pointsAwarded, co2ReductionKg, userId],
+      );
+
+      await tx.query(
+        '''
+        INSERT INTO point_transactions (
+          user_id, change_amount, transaction_type, related_id, remark
+        ) VALUES (?, ?, 'EVALUATION_REWARD', ?, ?)
+        ''',
+        [userId, pointsAwarded, catalogActionId, 'Eco action evaluated: $title'],
+      );
+    });
+
+    final history = await getEcoActionHistory(userId: userId, limit: 1);
+    final latestRecord = history.first;
+    final dashboard = await getEcoDashboard(userId: userId);
+    return EcoActionEvaluationResult(
+      record: latestRecord,
+      newPointsBalance: dashboard.currentPoints,
+      totalCo2ReductionKg: dashboard.totalCo2ReductionKg,
+    );
+  }
+
+  @override
+  Future<List<Badge>> getBadges({required String userId}) async {
+    final user = await _getUserById(userId);
+    if (user == null) {
+      throw StateError('User not found: $userId');
+    }
+
+    final result = await _connection.query(
+      '''
+      SELECT
+        b.id,
+        b.title,
+        b.description,
+        b.required_points,
+        b.icon,
+        ub.redeemed_at
+      FROM badges b
+      LEFT JOIN user_badges ub
+        ON ub.badge_id = b.id
+       AND ub.user_id = ?
+      WHERE b.active = 1
+      ORDER BY b.required_points ASC
+      ''',
+      [userId],
+    );
+
+    return result
+        .map((row) {
+          final redeemedAt = row[5]?.toString();
+          final redeemed = redeemedAt != null && redeemedAt.isNotEmpty;
+          return Badge(
+            id: row[0] as String,
+            title: _readText(row[1]),
+            description: _readText(row[2]),
+            requiredPoints: _readInt(row[3]),
+            icon: _readText(row[4]),
+            redeemed: redeemed,
+            redeemable: !redeemed && user.greenScore >= _readInt(row[3]),
+            redeemedAt: redeemed ? redeemedAt : null,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Future<BadgeRedeemResult> redeemBadge({
+    required String userId,
+    required String badgeId,
+  }) async {
+    final user = await _getUserById(userId);
+    if (user == null) {
+      throw StateError('User not found: $userId');
+    }
+
+    final badgeResult = await _connection.query(
+      '''
+      SELECT id, title, description, required_points, icon, active
+      FROM badges
+      WHERE id = ?
+      LIMIT 1
+      ''',
+      [badgeId],
+    );
+    if (badgeResult.isEmpty) {
+      throw StateError('Badge not found: $badgeId');
+    }
+
+    final row = badgeResult.first;
+    final active = _readBool(row[5]);
+    if (!active) {
+      throw StateError('Badge is inactive: $badgeId');
+    }
+
+    final requiredPoints = _readInt(row[3]);
+    if (user.greenScore < requiredPoints) {
+      throw StateError(
+        'Insufficient points. Required: $requiredPoints, current: ${user.greenScore}.',
+      );
+    }
+
+    final redeemedCheck = await _connection.query(
+      'SELECT COUNT(*) AS count FROM user_badges WHERE user_id = ? AND badge_id = ?',
+      [userId, badgeId],
+    );
+    if (_readInt(redeemedCheck.first.fields['count']) > 0) {
+      throw StateError('Badge already redeemed: $badgeId');
+    }
+
+    await _connection.transaction((tx) async {
+      await tx.query(
+        'INSERT INTO user_badges (user_id, badge_id) VALUES (?, ?)',
+        [userId, badgeId],
+      );
+
+      await tx.query(
+        'UPDATE app_users SET green_score = green_score - ? WHERE id = ?',
+        [requiredPoints, userId],
+      );
+
+      await tx.query(
+        '''
+        INSERT INTO point_transactions (
+          user_id, change_amount, transaction_type, related_id, remark
+        ) VALUES (?, ?, 'BADGE_REDEEM', ?, ?)
+        ''',
+        [userId, -requiredPoints, badgeId, 'Redeemed badge: ${row[1]}'],
+      );
+    });
+
+    final badges = await getBadges(userId: userId);
+    final redeemedBadge = badges.firstWhere((badge) => badge.id == badgeId);
+    final dashboard = await getEcoDashboard(userId: userId);
+
+    return BadgeRedeemResult(
+      badge: redeemedBadge,
+      newPointsBalance: dashboard.currentPoints,
+    );
+  }
+
+  @override
+  Future<EcoDashboard> getEcoDashboard({required String userId}) async {
+    final user = await _getUserById(userId);
+    if (user == null) {
+      throw StateError('User not found: $userId');
+    }
+
+    final evalCountResult = await _connection.query(
+      'SELECT COUNT(*) AS count FROM user_eco_action_records WHERE user_id = ?',
+      [userId],
+    );
+    final badgeCountResult = await _connection.query(
+      'SELECT COUNT(*) AS count FROM user_badges WHERE user_id = ?',
+      [userId],
+    );
+
+    return EcoDashboard(
+      userId: userId,
+      currentPoints: user.greenScore,
+      totalCo2ReductionKg: user.totalCo2ReductionKg,
+      totalEvaluations: _readInt(evalCountResult.first.fields['count']),
+      badgesRedeemed: _readInt(badgeCountResult.first.fields['count']),
     );
   }
 
@@ -574,6 +1146,175 @@ class MySqlWasteDataService implements WasteDataService {
       confidence: _confidenceFor(normalized),
       suggestions: category.recyclingTips,
     );
+  }
+
+  @override
+  Future<ClassificationResult> classifyImage({
+    required List<int> imageBytes,
+    required String fileName,
+    String? submittedBy,
+  }) async {
+    final categories = await getCategories();
+    final sourceName = fileName.trim().isEmpty ? 'upload.jpg' : fileName.trim();
+
+    final client = _aliyunClient;
+    if (client == null) {
+      // Safe fallback: classify by file name keywords when cloud vision path is
+      // unavailable (credentials not configured).
+      final guess = sourceName.replaceAll(RegExp(r'\.[^.]+$'), ' ');
+      return classify(guess.trim().isEmpty ? 'waste item' : guess.trim());
+    }
+
+    final response = await client.classifyRubbishByImageBytes(
+      imageBytes: Uint8List.fromList(imageBytes),
+      fileName: sourceName,
+    );
+    final bestElement = _pickBestElement(response);
+    final mappedCategory = _mapAliyunCategory(
+      aliyunCategory: bestElement.category,
+      labels: bestElement.rubbish,
+      categories: categories,
+    );
+
+    await _connection.query(
+      '''
+      INSERT INTO vision_classification_logs (
+        submitted_by,
+        source_file_name,
+        image_url,
+        request_id,
+        category_label,
+        category_score,
+        rubbish_label,
+        rubbish_score,
+        mapped_category_id,
+        mapped_category_title,
+        raw_response_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ''',
+      [
+        submittedBy?.trim().isEmpty ?? true ? null : submittedBy!.trim(),
+        sourceName,
+        response.imageUrl,
+        response.requestId,
+        bestElement.category,
+        bestElement.categoryScore,
+        bestElement.rubbish,
+        bestElement.rubbishScore,
+        mappedCategory.id,
+        mappedCategory.title,
+        jsonEncode(response.rawPayload),
+      ],
+    );
+
+    return ClassificationResult(
+      itemName: bestElement.rubbish.isEmpty ? sourceName : bestElement.rubbish,
+      category: mappedCategory,
+      confidence: bestElement.rubbishScore > 0
+          ? bestElement.rubbishScore
+          : bestElement.categoryScore,
+      suggestions: mappedCategory.recyclingTips,
+    );
+  }
+
+  @override
+  Future<List<AliyunRubbishResponse>> getRecentVisionLogs({int limit = 20}) async {
+    final safeLimit = limit.clamp(1, 200);
+    final result = await _connection.query(
+      '''
+      SELECT request_id, image_url, category_label, category_score, rubbish_label, rubbish_score, raw_response_json
+      FROM vision_classification_logs
+      ORDER BY created_at DESC
+      LIMIT ?
+      ''',
+      [safeLimit],
+    );
+
+    return result.map((row) {
+      final payloadText = row[6]?.toString() ?? '{}';
+      final payload = jsonDecode(payloadText);
+      final safePayload = payload is Map<String, dynamic>
+          ? payload
+          : <String, dynamic>{};
+      return AliyunRubbishResponse(
+        requestId: row[0]?.toString() ?? '',
+        sensitive: false,
+        imageUrl: row[1]?.toString() ?? '',
+        elements: [
+          AliyunRubbishElement(
+            category: row[2]?.toString() ?? '',
+            categoryScore: _readDouble(row[3]),
+            rubbish: row[4]?.toString() ?? '',
+            rubbishScore: _readDouble(row[5]),
+          ),
+        ],
+        rawPayload: safePayload,
+      );
+    }).toList(growable: false);
+  }
+
+  AliyunRubbishElement _pickBestElement(AliyunRubbishResponse response) {
+    if (response.elements.isEmpty) {
+      throw StateError('Aliyun returned no classification elements.');
+    }
+    final sorted = response.elements.toList(growable: false)
+      ..sort((a, b) => b.rubbishScore.compareTo(a.rubbishScore));
+    return sorted.first;
+  }
+
+  WasteCategory _mapAliyunCategory({
+    required String aliyunCategory,
+    required String labels,
+    required List<WasteCategory> categories,
+  }) {
+    final normalizedCategory = aliyunCategory.toLowerCase().trim();
+    final normalizedLabels = labels.toLowerCase();
+
+    if (normalizedCategory.contains('harm') ||
+        normalizedCategory.contains('hazard') ||
+        normalizedCategory.contains('dangerous') ||
+        normalizedCategory.contains('有害') ||
+        normalizedLabels.contains('battery') ||
+        normalizedLabels.contains('paint') ||
+        normalizedLabels.contains('medicine') ||
+        normalizedLabels.contains('chemical') ||
+        normalizedLabels.contains('电池') ||
+        normalizedLabels.contains('药')) {
+      return _categoryById(categories, 'hazardous');
+    }
+
+    if (normalizedCategory.contains('kitchen') ||
+        normalizedCategory.contains('food') ||
+        normalizedCategory.contains('wet') ||
+        normalizedCategory.contains('organic') ||
+        normalizedCategory.contains('厨余') ||
+        normalizedCategory.contains('湿') ||
+        normalizedLabels.contains('banana') ||
+        normalizedLabels.contains('vegetable') ||
+        normalizedLabels.contains('fruit') ||
+        normalizedLabels.contains('food') ||
+        normalizedLabels.contains('果') ||
+        normalizedLabels.contains('菜')) {
+      return _categoryById(categories, 'organic');
+    }
+
+    if (normalizedCategory.contains('recycle') ||
+        normalizedCategory.contains('recyclable') ||
+        normalizedCategory.contains('可回收') ||
+        normalizedLabels.contains('bottle') ||
+        normalizedLabels.contains('paper') ||
+        normalizedLabels.contains('cardboard') ||
+        normalizedLabels.contains('can') ||
+        normalizedLabels.contains('plastic') ||
+        normalizedLabels.contains('glass') ||
+        normalizedLabels.contains('纸') ||
+        normalizedLabels.contains('塑料') ||
+        normalizedLabels.contains('金属') ||
+        normalizedLabels.contains('玻璃')) {
+      return _categoryById(categories, 'recyclable');
+    }
+
+    return _categoryById(categories, 'residual');
   }
 
   WasteCategory _toWasteCategory(ResultRow row) {
@@ -626,6 +1367,35 @@ class MySqlWasteDataService implements WasteDataService {
     return 0.82;
   }
 
+  Future<AppUser?> _getUserById(String userId) async {
+    final result = await _connection.query(
+      '''
+      SELECT
+        id, name, email, city, level, green_score, total_recycled_kg, avatar_initials, total_co2_reduction_kg
+      FROM app_users
+      WHERE id = ?
+      LIMIT 1
+      ''',
+      [userId],
+    );
+    if (result.isEmpty) {
+      return null;
+    }
+
+    final row = result.first;
+    return AppUser(
+      id: row[0] as String,
+      name: row[1] as String,
+      email: row[2] as String,
+      city: row[3] as String,
+      level: row[4] as String,
+      greenScore: _readInt(row[5]),
+      totalRecycledKg: _readDouble(row[6]),
+      avatarInitials: row[7] as String,
+      totalCo2ReductionKg: _readDouble(row[8]),
+    );
+  }
+
   List<String> _readStringList(Object? value) {
     if (value == null) {
       return const [];
@@ -667,8 +1437,30 @@ class MySqlWasteDataService implements WasteDataService {
     return value.toString() == '1' || value.toString().toLowerCase() == 'true';
   }
 
+  String _readText(Object? value) {
+    if (value == null) {
+      return '';
+    }
+    if (value is String) {
+      return value;
+    }
+    if (value is Blob) {
+      return utf8.decode(value.toBytes());
+    }
+    return value.toString();
+  }
+
+  int _roundToInt(double value) {
+    return value.round();
+  }
+
+  double _round2(double value) {
+    return double.parse(value.toStringAsFixed(2));
+  }
+
   @override
   Future<void> close() async {
+    _aliyunClient?.close();
     await _connection.close();
   }
 }

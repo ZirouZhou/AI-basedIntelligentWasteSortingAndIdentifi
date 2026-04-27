@@ -1,4 +1,5 @@
 import '../models/app_models.dart';
+import '../models/vision_models.dart';
 import 'waste_data_service.dart';
 
 /// In-memory implementation of [WasteDataService].
@@ -210,9 +211,61 @@ class InMemoryWasteDataService implements WasteDataService {
         greenScore: 836,
         totalRecycledKg: 48.5,
         avatarInitials: 'AG',
+        totalCo2ReductionKg: 12.4,
       ),
     );
   }
+
+  static const _catalog = <EcoActionCatalogItem>[
+    EcoActionCatalogItem(
+      id: 'reuse_bag',
+      title: 'Use Reusable Shopping Bag',
+      description: 'Replace single-use plastic bags with reusable bags.',
+      unitLabel: 'times',
+      co2KgPerUnit: 0.06,
+      pointsPerUnit: 3,
+      active: true,
+    ),
+    EcoActionCatalogItem(
+      id: 'bus_commute',
+      title: 'Take Bus Instead of Car',
+      description: 'Choose public transportation for daily commute.',
+      unitLabel: 'km',
+      co2KgPerUnit: 0.14,
+      pointsPerUnit: 2,
+      active: true,
+    ),
+    EcoActionCatalogItem(
+      id: 'recycle_paper',
+      title: 'Recycle Paper Waste',
+      description: 'Sort and recycle clean paper products.',
+      unitLabel: 'kg',
+      co2KgPerUnit: 0.9,
+      pointsPerUnit: 8,
+      active: true,
+    ),
+  ];
+
+  static const _badges = <Badge>[
+    Badge(
+      id: 'bronze_guardian',
+      title: 'Bronze Carbon Guardian',
+      description: 'Awarded to users reaching 100 points.',
+      requiredPoints: 100,
+      icon: '🥉',
+      redeemed: false,
+      redeemable: true,
+    ),
+    Badge(
+      id: 'silver_guardian',
+      title: 'Silver Carbon Guardian',
+      description: 'Awarded to users reaching 250 points.',
+      requiredPoints: 250,
+      icon: '🥈',
+      redeemed: false,
+      redeemable: true,
+    ),
+  ];
 
   @override
   Future<List<WasteCategory>> getCategories() async => categories;
@@ -233,6 +286,95 @@ class InMemoryWasteDataService implements WasteDataService {
   Future<AppUser> getProfile() async => profile;
 
   @override
+  Future<List<EcoActionCatalogItem>> getEcoActionCatalog() async => _catalog;
+
+  @override
+  Future<List<EcoActionRecord>> getEcoActionHistory({
+    required String userId,
+    int limit = 20,
+  }) async {
+    final records = <EcoActionRecord>[
+      const EcoActionRecord(
+        id: 1,
+        userId: 'u1',
+        catalogActionId: 'reuse_bag',
+        actionTitle: 'Use Reusable Shopping Bag',
+        quantity: 5,
+        unitLabel: 'times',
+        co2ReductionKg: 0.3,
+        pointsAwarded: 15,
+        createdAt: '2026-04-27 10:00:00',
+        note: 'Weekly grocery',
+      ),
+      const EcoActionRecord(
+        id: 2,
+        userId: 'u1',
+        catalogActionId: 'bus_commute',
+        actionTitle: 'Take Bus Instead of Car',
+        quantity: 8,
+        unitLabel: 'km',
+        co2ReductionKg: 1.12,
+        pointsAwarded: 16,
+        createdAt: '2026-04-27 08:30:00',
+      ),
+    ];
+
+    return records.take(limit).toList(growable: false);
+  }
+
+  @override
+  Future<EcoActionEvaluationResult> evaluateEcoAction({
+    required String userId,
+    required String catalogActionId,
+    required double quantity,
+    String? note,
+  }) async {
+    final catalog = _catalog.firstWhere((item) => item.id == catalogActionId);
+    final co2 = double.parse((catalog.co2KgPerUnit * quantity).toStringAsFixed(2));
+    final points = (catalog.pointsPerUnit * quantity).round();
+    const newBalance = 900;
+    return EcoActionEvaluationResult(
+      record: EcoActionRecord(
+        id: 999,
+        userId: userId,
+        catalogActionId: catalog.id,
+        actionTitle: catalog.title,
+        quantity: quantity,
+        unitLabel: catalog.unitLabel,
+        co2ReductionKg: co2,
+        pointsAwarded: points,
+        createdAt: '2026-04-27 12:00:00',
+        note: note,
+      ),
+      newPointsBalance: newBalance,
+      totalCo2ReductionKg: profile.totalCo2ReductionKg + co2,
+    );
+  }
+
+  @override
+  Future<List<Badge>> getBadges({required String userId}) async => _badges;
+
+  @override
+  Future<BadgeRedeemResult> redeemBadge({
+    required String userId,
+    required String badgeId,
+  }) async {
+    final badge = _badges.firstWhere((item) => item.id == badgeId);
+    return BadgeRedeemResult(badge: badge, newPointsBalance: 700);
+  }
+
+  @override
+  Future<EcoDashboard> getEcoDashboard({required String userId}) async {
+    return EcoDashboard(
+      userId: userId,
+      currentPoints: profile.greenScore,
+      totalCo2ReductionKg: profile.totalCo2ReductionKg,
+      totalEvaluations: 2,
+      badgesRedeemed: 1,
+    );
+  }
+
+  @override
   Future<bool> pingDatabase() async => true;
 
   @override
@@ -246,6 +388,21 @@ class InMemoryWasteDataService implements WasteDataService {
       confidence: _confidenceFor(normalized),
       suggestions: category.recyclingTips,
     );
+  }
+
+  @override
+  Future<ClassificationResult> classifyImage({
+    required List<int> imageBytes,
+    required String fileName,
+    String? submittedBy,
+  }) async {
+    // Local fallback path for tests/dev when cloud AI is unavailable.
+    return classify(fileName.replaceAll(RegExp(r'\.[^.]+$'), ''));
+  }
+
+  @override
+  Future<List<AliyunRubbishResponse>> getRecentVisionLogs({int limit = 20}) async {
+    return const [];
   }
 
   WasteCategory _matchCategory(String normalized) {

@@ -31,7 +31,15 @@ Router buildRouter(WasteDataService service) {
         'GET /health',
         'GET /categories',
         'POST /classify',
+        'POST /classify-image',
+        'GET /vision-logs?limit=20',
         'GET /eco-actions',
+        'GET /eco-action-catalog',
+        'GET /eco-actions/history?userId=u1',
+        'POST /eco-actions/evaluate',
+        'GET /badges?userId=u1',
+        'POST /badges/redeem',
+        'GET /eco-dashboard?userId=u1',
         'GET /rewards',
         'GET /forum-posts',
         'GET /messages',
@@ -89,6 +97,78 @@ Router buildRouter(WasteDataService service) {
   });
 
   // ---------------------------------------------------------------------------
+  // POST /classify-image
+  // Accepts base64 encoded image data and uses cloud vision service for
+  // garbage classification.
+  // ---------------------------------------------------------------------------
+  router.post('/classify-image', (Request request) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+
+    final imageBase64 = (data['imageBase64'] as String?)?.trim() ?? '';
+    final fileName = ((data['fileName'] as String?)?.trim() ?? 'upload.jpg');
+    final submittedBy = (data['submittedBy'] as String?)?.trim();
+
+    if (imageBase64.isEmpty) {
+      return _jsonResponse({'error': 'imageBase64 is required.'}, statusCode: 400);
+    }
+
+    List<int> imageBytes;
+    try {
+      // Support both plain base64 and data-url payloads.
+      final payload = imageBase64.contains(',')
+          ? imageBase64.substring(imageBase64.indexOf(',') + 1)
+          : imageBase64;
+      imageBytes = base64Decode(payload);
+    } catch (_) {
+      return _jsonResponse(
+        {'error': 'imageBase64 is not valid base64.'},
+        statusCode: 400,
+      );
+    }
+
+    if (imageBytes.isEmpty) {
+      return _jsonResponse({'error': 'Decoded image is empty.'}, statusCode: 400);
+    }
+
+    try {
+      final result = await service.classifyImage(
+        imageBytes: imageBytes,
+        fileName: fileName,
+        submittedBy: submittedBy,
+      );
+      return _jsonResponse(result.toJson());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /vision-logs?limit=20
+  // Returns latest raw vision logs for diagnostics.
+  // ---------------------------------------------------------------------------
+  router.get('/vision-logs', (Request request) async {
+    final limit =
+        int.tryParse(request.requestedUri.queryParameters['limit'] ?? '') ?? 20;
+    final logs = await service.getRecentVisionLogs(limit: limit);
+    final json = logs
+        .map(
+          (item) => {
+            'requestId': item.requestId,
+            'sensitive': item.sensitive,
+            'imageUrl': item.imageUrl,
+            'elements': item.elements.map((e) => e.toJson()).toList(),
+            'rawPayload': item.rawPayload,
+          },
+        )
+        .toList(growable: false);
+    return _jsonResponse(json);
+  });
+
+  // ---------------------------------------------------------------------------
   // GET /eco-actions
   // Returns a list of suggested eco-friendly actions that users can take to
   // reduce waste and live more sustainably.
@@ -96,6 +176,145 @@ Router buildRouter(WasteDataService service) {
   router.get('/eco-actions', (Request request) async {
     final actions = await service.getEcoActions();
     return _jsonResponse(actions.map((item) => item.toJson()).toList());
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /eco-action-catalog
+  // Returns configurable eco behavior types used for carbon reduction
+  // evaluation and points calculation.
+  // ---------------------------------------------------------------------------
+  router.get('/eco-action-catalog', (Request request) async {
+    final catalog = await service.getEcoActionCatalog();
+    return _jsonResponse(catalog.map((item) => item.toJson()).toList());
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /eco-actions/history?userId=u1&limit=20
+  // Returns recently evaluated eco action records for one user.
+  // ---------------------------------------------------------------------------
+  router.get('/eco-actions/history', (Request request) async {
+    final userId =
+        request.requestedUri.queryParameters['userId']?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+
+    final limit =
+        int.tryParse(request.requestedUri.queryParameters['limit'] ?? '') ?? 20;
+    final history = await service.getEcoActionHistory(userId: userId, limit: limit);
+    return _jsonResponse(history.map((item) => item.toJson()).toList());
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /eco-actions/evaluate
+  // Evaluates carbon reduction and awards points for a submitted eco action.
+  // ---------------------------------------------------------------------------
+  router.post('/eco-actions/evaluate', (Request request) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+
+    final userId = (data['userId'] as String?)?.trim() ?? '';
+    final catalogActionId = (data['catalogActionId'] as String?)?.trim() ?? '';
+    final quantityRaw = data['quantity'];
+    final quantity = quantityRaw is num ? quantityRaw.toDouble() : null;
+    final note = data['note'] as String?;
+
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+    if (catalogActionId.isEmpty) {
+      return _jsonResponse(
+        {'error': 'catalogActionId is required.'},
+        statusCode: 400,
+      );
+    }
+    if (quantity == null || quantity <= 0) {
+      return _jsonResponse(
+        {'error': 'quantity must be a positive number.'},
+        statusCode: 400,
+      );
+    }
+
+    try {
+      final result = await service.evaluateEcoAction(
+        userId: userId,
+        catalogActionId: catalogActionId,
+        quantity: quantity,
+        note: note,
+      );
+      return _jsonResponse(result.toJson());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /badges?userId=u1
+  // Returns badge redemption status and redeemability for the user.
+  // ---------------------------------------------------------------------------
+  router.get('/badges', (Request request) async {
+    final userId =
+        request.requestedUri.queryParameters['userId']?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+
+    try {
+      final badges = await service.getBadges(userId: userId);
+      return _jsonResponse(badges.map((item) => item.toJson()).toList());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /badges/redeem
+  // Redeems one badge if user has enough points.
+  // ---------------------------------------------------------------------------
+  router.post('/badges/redeem', (Request request) async {
+    final body = await request.readAsString();
+    final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    if (data is! Map<String, dynamic>) {
+      return _jsonResponse({'error': 'Invalid request body.'}, statusCode: 400);
+    }
+
+    final userId = (data['userId'] as String?)?.trim() ?? '';
+    final badgeId = (data['badgeId'] as String?)?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+    if (badgeId.isEmpty) {
+      return _jsonResponse({'error': 'badgeId is required.'}, statusCode: 400);
+    }
+
+    try {
+      final result = await service.redeemBadge(userId: userId, badgeId: badgeId);
+      return _jsonResponse(result.toJson());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /eco-dashboard?userId=u1
+  // Returns point balance + cumulative carbon-reduction summary.
+  // ---------------------------------------------------------------------------
+  router.get('/eco-dashboard', (Request request) async {
+    final userId =
+        request.requestedUri.queryParameters['userId']?.trim() ?? '';
+    if (userId.isEmpty) {
+      return _jsonResponse({'error': 'userId is required.'}, statusCode: 400);
+    }
+
+    try {
+      final dashboard = await service.getEcoDashboard(userId: userId);
+      return _jsonResponse(dashboard.toJson());
+    } on StateError catch (error) {
+      return _jsonResponse({'error': error.message}, statusCode: 400);
+    }
   });
 
   // ---------------------------------------------------------------------------
