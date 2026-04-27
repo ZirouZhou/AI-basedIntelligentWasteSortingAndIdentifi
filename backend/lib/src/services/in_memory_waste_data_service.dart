@@ -22,6 +22,7 @@ class InMemoryWasteDataService implements WasteDataService {
   final List<ForumPost> forumPosts;
   final List<MessageThread> messages;
   final AppUser profile;
+  static final Map<String, AppUser> _usersByToken = <String, AppUser>{};
 
   factory InMemoryWasteDataService.seeded() {
     const categories = [
@@ -302,6 +303,59 @@ class InMemoryWasteDataService implements WasteDataService {
   ];
 
   @override
+  Future<AuthSession> register({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    final user = AppUser(
+      id: 'u_mem_${DateTime.now().millisecondsSinceEpoch}',
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      city: 'Shanghai',
+      level: 'Eco Beginner',
+      greenScore: 0,
+      totalRecycledKg: 0,
+      avatarInitials: 'NB',
+      totalCo2ReductionKg: 0,
+    );
+    final token = 'mem-token-${DateTime.now().millisecondsSinceEpoch}';
+    _usersByToken[token] = user;
+    return AuthSession(
+      token: token,
+      expiresAt: DateTime.now()
+          .add(const Duration(days: 7))
+          .toIso8601String(),
+      user: user,
+    );
+  }
+
+  @override
+  Future<AuthSession> login({
+    required String email,
+    required String password,
+  }) async {
+    final token = 'mem-token-${DateTime.now().millisecondsSinceEpoch}';
+    _usersByToken[token] = profile;
+    return AuthSession(
+      token: token,
+      expiresAt: DateTime.now()
+          .add(const Duration(days: 7))
+          .toIso8601String(),
+      user: profile,
+    );
+  }
+
+  @override
+  Future<AppUser> requireUserByToken(String token) async {
+    final user = _usersByToken[token.trim()];
+    if (user == null) {
+      throw StateError('Unauthorized. Please login again.');
+    }
+    return user;
+  }
+
+  @override
   Future<List<WasteCategory>> getCategories() async => categories;
 
   @override
@@ -526,7 +580,124 @@ class InMemoryWasteDataService implements WasteDataService {
   }) async {}
 
   @override
-  Future<AppUser> getProfile() async => profile;
+  Future<AppUser> getProfile({required String userId}) async => profile;
+
+  @override
+  Future<AppUser> updateProfile({
+    required String userId,
+    required String name,
+    required String email,
+    required String city,
+  }) async {
+    return AppUser(
+      id: profile.id,
+      name: name.trim(),
+      email: email.trim(),
+      city: city.trim(),
+      level: profile.level,
+      greenScore: profile.greenScore,
+      totalRecycledKg: profile.totalRecycledKg,
+      avatarInitials: _initialsFromName(name),
+      avatarUrl: profile.avatarUrl,
+      totalCo2ReductionKg: profile.totalCo2ReductionKg,
+    );
+  }
+
+  @override
+  Future<void> updateAvatar({
+    required String userId,
+    required String avatarUrl,
+  }) async {}
+
+  @override
+  Future<void> changePassword({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+  }) async {}
+
+  @override
+  Future<List<UserRecognitionRecord>> getRecognitionHistory({
+    required String userId,
+    int limit = 50,
+  }) async {
+    return const [
+      UserRecognitionRecord(
+        id: 1,
+        fileName: 'battery.jpg',
+        imageUrl: 'https://example.com/vision/battery.jpg',
+        categoryLabel: 'Hazardous Waste',
+        rubbishLabel: 'Battery',
+        confidence: 0.96,
+        createdAt: '2026-04-27 10:10:00',
+      ),
+      UserRecognitionRecord(
+        id: 2,
+        fileName: 'bottle.jpg',
+        imageUrl: 'https://example.com/vision/bottle.jpg',
+        categoryLabel: 'Recyclable Waste',
+        rubbishLabel: 'Plastic Bottle',
+        confidence: 0.94,
+        createdAt: '2026-04-27 09:30:00',
+      ),
+    ].take(limit).toList(growable: false);
+  }
+
+  @override
+  Future<List<UserPointHistoryRecord>> getPointHistory({
+    required String userId,
+    int limit = 50,
+  }) async {
+    return const [
+      UserPointHistoryRecord(
+        id: 1,
+        userId: 'u1',
+        changeAmount: 18,
+        transactionType: 'EVALUATION_REWARD',
+        relatedId: 'reuse_bag',
+        remark: 'Eco action evaluated: Use Reusable Shopping Bag',
+        createdAt: '2026-04-27 10:00:00',
+      ),
+      UserPointHistoryRecord(
+        id: 2,
+        userId: 'u1',
+        changeAmount: -100,
+        transactionType: 'BADGE_REDEEM',
+        relatedId: 'bronze_guardian',
+        remark: 'Redeemed badge: Bronze Carbon Guardian',
+        createdAt: '2026-04-26 15:10:00',
+      ),
+    ].take(limit).toList(growable: false);
+  }
+
+  @override
+  Future<List<UserBadgeHistoryRecord>> getBadgeHistory({
+    required String userId,
+    int limit = 50,
+  }) async {
+    return const [
+      UserBadgeHistoryRecord(
+        id: 1,
+        userId: 'u1',
+        badgeId: 'bronze_guardian',
+        badgeTitle: 'Bronze Carbon Guardian',
+        badgeIcon: '🥎',
+        requiredPoints: 100,
+        redeemedAt: '2026-04-26 15:10:00',
+      ),
+    ].take(limit).toList(growable: false);
+  }
+
+  @override
+  Future<List<ForumPost>> getUserForumPosts({
+    required String userId,
+    int limit = 50,
+  }) async {
+    return forumPosts
+        .where((item) => item.authorId == userId || item.author == profile.name)
+        .take(limit)
+        .toList(growable: false);
+  }
 
   @override
   Future<List<EcoActionCatalogItem>> getEcoActionCatalog() async => _catalog;
@@ -697,6 +868,21 @@ class InMemoryWasteDataService implements WasteDataService {
       return 0.94;
     }
     return 0.82;
+  }
+
+  String _initialsFromName(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) {
+      return 'U';
+    }
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
   }
 
   @override

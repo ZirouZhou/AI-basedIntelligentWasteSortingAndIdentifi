@@ -12,7 +12,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
-import 'app_shell.dart';
+import '../features/auth/auth_page.dart';
 
 /// The root widget of the EcoSort AI application.
 ///
@@ -27,7 +27,7 @@ class WasteSortingApp extends StatelessWidget {
       title: 'EcoSort AI',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const AppShell(),
+      home: const AuthPage(),
     );
   }
 }

@@ -16,7 +16,7 @@ class ChatPage extends StatefulWidget {
     required this.peerUserId,
     required this.peerName,
     required this.peerAvatarInitials,
-    this.currentUserId = 'u1',
+    required this.currentUserId,
   });
 
   final String conversationId;

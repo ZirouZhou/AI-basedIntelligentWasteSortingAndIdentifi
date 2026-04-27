@@ -7,7 +7,12 @@ import '../../core/state/mock_data.dart';
 import '../../core/theme/app_theme.dart';
 
 class ClassifyPage extends StatefulWidget {
-  const ClassifyPage({super.key});
+  const ClassifyPage({
+    super.key,
+    required this.userId,
+  });
+
+  final String userId;
 
   @override
   State<ClassifyPage> createState() => _ClassifyPageState();
@@ -97,7 +102,7 @@ class _ClassifyPageState extends State<ClassifyPage> {
       final result = await _apiClient.classifyWasteImage(
         imageBytes: bytes,
         fileName: picked.name,
-        submittedBy: 'u1',
+        submittedBy: widget.userId,
       );
       if (!mounted) {
         return;

@@ -7,14 +7,18 @@ import '../../core/theme/app_theme.dart';
 import '../messages/chat_page.dart';
 
 class CommunityPage extends StatefulWidget {
-  const CommunityPage({super.key});
+  const CommunityPage({
+    super.key,
+    required this.userId,
+  });
+
+  final String userId;
 
   @override
   State<CommunityPage> createState() => _CommunityPageState();
 }
 
 class _CommunityPageState extends State<CommunityPage> {
-  static const _userId = 'u1';
   final _apiClient = ApiClient();
   final _tags = const [
     'Sorting Tips',
@@ -73,7 +77,7 @@ class _CommunityPageState extends State<CommunityPage> {
     try {
       final updated = await _apiClient.toggleForumPostLike(
         postId: post.id,
-        userId: _userId,
+        userId: widget.userId,
       );
       if (!mounted) {
         return;
@@ -95,7 +99,7 @@ class _CommunityPageState extends State<CommunityPage> {
 
   Future<void> _openChatByAvatar(ForumPost post) async {
     final peerId = post.authorId.trim();
-    if (peerId.isEmpty || peerId == _userId) {
+    if (peerId.isEmpty || peerId == widget.userId) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cannot open chat with this user.')),
       );
@@ -104,7 +108,7 @@ class _CommunityPageState extends State<CommunityPage> {
 
     try {
       final conversationId = await _apiClient.getOrCreateDirectConversation(
-        userId: _userId,
+        userId: widget.userId,
         peerUserId: peerId,
       );
       if (!mounted) {
@@ -118,7 +122,7 @@ class _CommunityPageState extends State<CommunityPage> {
             peerUserId: peerId,
             peerName: post.author,
             peerAvatarInitials: initials,
-            currentUserId: _userId,
+            currentUserId: widget.userId,
           ),
         ),
       );
@@ -236,7 +240,7 @@ class _CommunityPageState extends State<CommunityPage> {
 
     try {
       final created = await _apiClient.createForumPost(
-        authorId: _userId,
+        authorId: widget.userId,
         title: title,
         content: content,
         tag: selectedTag,
@@ -275,7 +279,7 @@ class _CommunityPageState extends State<CommunityPage> {
             try {
               await _apiClient.createForumComment(
                 postId: post.id,
-                authorId: _userId,
+                authorId: widget.userId,
                 content: content,
                 parentCommentId: parentCommentId,
               );
@@ -294,7 +298,7 @@ class _CommunityPageState extends State<CommunityPage> {
             try {
               await _apiClient.toggleForumCommentLike(
                 commentId: commentId,
-                userId: _userId,
+                userId: widget.userId,
               );
               await _loadComments(post.id);
             } catch (_) {
@@ -315,7 +319,7 @@ class _CommunityPageState extends State<CommunityPage> {
     try {
       final comments = await _apiClient.fetchForumComments(
         postId: postId,
-        userId: _userId,
+        userId: widget.userId,
       );
       if (!mounted) {
         return;

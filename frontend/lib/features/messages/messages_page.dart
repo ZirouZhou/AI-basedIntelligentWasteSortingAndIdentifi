@@ -7,14 +7,18 @@ import '../../core/theme/app_theme.dart';
 import 'chat_page.dart';
 
 class MessagesPage extends StatefulWidget {
-  const MessagesPage({super.key});
+  const MessagesPage({
+    super.key,
+    required this.userId,
+  });
+
+  final String userId;
 
   @override
   State<MessagesPage> createState() => _MessagesPageState();
 }
 
 class _MessagesPageState extends State<MessagesPage> {
-  static const _userId = 'u1';
   late final ApiClient _apiClient;
   bool _loading = true;
   String? _error;
@@ -40,7 +44,7 @@ class _MessagesPageState extends State<MessagesPage> {
     });
     try {
       final conversations = await _apiClient.fetchChatConversations(
-        userId: _userId,
+        userId: widget.userId,
       );
       if (!mounted) {
         return;
@@ -51,7 +55,9 @@ class _MessagesPageState extends State<MessagesPage> {
         return;
       }
       setState(() {
-        _conversations = MockData.messages;
+        _conversations = MockData.messages
+            .where((item) => item.peerUserId != widget.userId)
+            .toList(growable: false);
         _error = 'Backend unavailable. Showing demo conversations.';
       });
     } finally {
@@ -69,7 +75,7 @@ class _MessagesPageState extends State<MessagesPage> {
           peerUserId: item.peerUserId,
           peerName: item.peerName,
           peerAvatarInitials: item.peerAvatarInitials,
-          currentUserId: _userId,
+          currentUserId: widget.userId,
         ),
       ),
     ).then((_) => _load());

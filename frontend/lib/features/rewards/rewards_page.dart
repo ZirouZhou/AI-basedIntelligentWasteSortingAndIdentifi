@@ -5,15 +5,18 @@ import '../../core/services/api_client.dart';
 import '../../core/theme/app_theme.dart';
 
 class RewardsPage extends StatefulWidget {
-  const RewardsPage({super.key});
+  const RewardsPage({
+    super.key,
+    required this.userId,
+  });
+
+  final String userId;
 
   @override
   State<RewardsPage> createState() => _RewardsPageState();
 }
 
 class _RewardsPageState extends State<RewardsPage> {
-  static const _userId = 'u1';
-
   late final ApiClient _apiClient;
   late final TextEditingController _quantityController;
   late final TextEditingController _noteController;
@@ -55,10 +58,10 @@ class _RewardsPageState extends State<RewardsPage> {
     });
     try {
       final results = await Future.wait<dynamic>([
-        _apiClient.fetchEcoDashboard(userId: _userId),
+        _apiClient.fetchEcoDashboard(userId: widget.userId),
         _apiClient.fetchEcoActionCatalog(),
-        _apiClient.fetchEcoActionHistory(userId: _userId, limit: 20),
-        _apiClient.fetchBadges(userId: _userId),
+        _apiClient.fetchEcoActionHistory(userId: widget.userId, limit: 20),
+        _apiClient.fetchBadges(userId: widget.userId),
       ]);
 
       final dashboard = results[0] as EcoDashboard;
@@ -101,7 +104,7 @@ class _RewardsPageState extends State<RewardsPage> {
     });
     try {
       final result = await _apiClient.evaluateEcoAction(
-        userId: _userId,
+        userId: widget.userId,
         catalogActionId: selected,
         quantity: quantity,
         note: _noteController.text.trim(),
@@ -129,7 +132,10 @@ class _RewardsPageState extends State<RewardsPage> {
       _successMessage = null;
     });
     try {
-      final result = await _apiClient.redeemBadge(userId: _userId, badgeId: badge.id);
+      final result = await _apiClient.redeemBadge(
+        userId: widget.userId,
+        badgeId: badge.id,
+      );
       setState(() {
         _successMessage =
             'Badge redeemed: ${result.badge.title}. Remaining points: ${result.newPointsBalance}.';

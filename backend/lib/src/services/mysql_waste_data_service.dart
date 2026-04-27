@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:mysql1/mysql1.dart';
 
 import '../config/aliyun_config.dart';
@@ -25,6 +27,7 @@ class MySqlWasteDataService implements WasteDataService {
   final DatabaseConfig _config;
   final MySqlConnection _connection;
   final AliyunVisionClient? _aliyunClient;
+  final Random _secureRandom = Random.secure();
 
   static const _defaultUserId = 'u1';
 
@@ -172,7 +175,36 @@ class MySqlWasteDataService implements WasteDataService {
         green_score INT NOT NULL,
         total_recycled_kg DOUBLE NOT NULL,
         avatar_initials VARCHAR(16) NOT NULL,
+        avatar_url TEXT NULL,
+        password_hash VARCHAR(255) NOT NULL DEFAULT '',
         total_co2_reduction_kg DOUBLE NOT NULL DEFAULT 0
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS user_accounts (
+        user_id VARCHAR(32) PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_user_accounts_email (email),
+        CONSTRAINT fk_user_accounts_user
+          FOREIGN KEY (user_id) REFERENCES app_users(id)
+          ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
+    ''');
+
+    await _connection.query('''
+      CREATE TABLE IF NOT EXISTS auth_sessions (
+        token VARCHAR(128) PRIMARY KEY,
+        user_id VARCHAR(32) NOT NULL,
+        expires_at DATETIME NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_auth_sessions_user (user_id),
+        INDEX idx_auth_sessions_expires (expires_at),
+        CONSTRAINT fk_auth_sessions_user
+          FOREIGN KEY (user_id) REFERENCES app_users(id)
+          ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=${_config.charset}
     ''');
 
@@ -338,6 +370,18 @@ class MySqlWasteDataService implements WasteDataService {
       ddl: 'ALTER TABLE forum_posts ADD COLUMN author_id VARCHAR(32) NULL',
     );
 
+    await _addColumnIfMissing(
+      table: 'app_users',
+      column: 'avatar_url',
+      ddl: 'ALTER TABLE app_users ADD COLUMN avatar_url TEXT NULL',
+    );
+
+    await _addColumnIfMissing(
+      table: 'app_users',
+      column: 'password_hash',
+      ddl: "ALTER TABLE app_users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''",
+    );
+
     await _backfillForumAuthorIds();
     await _upgradeChatMessageContentTypeIfNeeded();
   }
@@ -381,6 +425,132 @@ class MySqlWasteDataService implements WasteDataService {
     }
   }
 
+  @override
+  Future<AuthSession> register({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    final safeName = name.trim();
+    final safeEmail = email.trim().toLowerCase();
+    final safePassword = password.trim();
+    if (safeName.isEmpty) {
+      throw StateError('name is required.');
+    }
+    if (safeEmail.isEmpty) {
+      throw StateError('email is required.');
+    }
+    if (!safeEmail.contains('@')) {
+      throw StateError('email format is invalid.');
+    }
+    if (safePassword.length < 6) {
+      throw StateError('password must be at least 6 characters.');
+    }
+
+    final exists = await _connection.query(
+      'SELECT COUNT(*) AS count FROM user_accounts WHERE email = ?',
+      [safeEmail],
+    );
+    if (_readInt(exists.first.fields['count']) > 0) {
+      throw StateError('email already registered.');
+    }
+
+    final userId = _newUserId();
+    final avatarInitials = _buildAvatarInitials(safeName);
+    await _connection.transaction((tx) async {
+      await tx.query(
+        '''
+        INSERT INTO app_users (
+          id, name, email, city, level, green_score, total_recycled_kg, avatar_initials, total_co2_reduction_kg
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+        [
+          userId,
+          safeName,
+          safeEmail,
+          'Shanghai',
+          'Eco Beginner',
+          0,
+          0.0,
+          avatarInitials,
+          0.0,
+        ],
+      );
+      await tx.query(
+        '''
+        INSERT INTO user_accounts (user_id, email, password_hash, created_at)
+        VALUES (?, ?, ?, NOW())
+        ''',
+        [userId, safeEmail, _hashPassword(safePassword)],
+      );
+    });
+
+    final user = (await _getUserById(userId))!;
+    return _createSessionForUser(user.id);
+  }
+
+  @override
+  Future<AuthSession> login({
+    required String email,
+    required String password,
+  }) async {
+    final safeEmail = email.trim().toLowerCase();
+    final safePassword = password.trim();
+    if (safeEmail.isEmpty || safePassword.isEmpty) {
+      throw StateError('email and password are required.');
+    }
+
+    final result = await _connection.query(
+      '''
+      SELECT user_id, password_hash
+      FROM user_accounts
+      WHERE email = ?
+      LIMIT 1
+      ''',
+      [safeEmail],
+    );
+    if (result.isEmpty) {
+      throw StateError('Invalid email or password.');
+    }
+
+    final row = result.first;
+    final userId = _readText(row[0]);
+    final storedHash = _readText(row[1]);
+    if (!_verifyPassword(safePassword, storedHash)) {
+      throw StateError('Invalid email or password.');
+    }
+
+    return _createSessionForUser(userId);
+  }
+
+  @override
+  Future<AppUser> requireUserByToken(String token) async {
+    final safeToken = token.trim();
+    if (safeToken.isEmpty) {
+      throw StateError('Authorization token is required.');
+    }
+
+    final result = await _connection.query(
+      '''
+      SELECT user_id
+      FROM auth_sessions
+      WHERE token = ?
+        AND expires_at > NOW()
+      LIMIT 1
+      ''',
+      [safeToken],
+    );
+    if (result.isEmpty) {
+      throw StateError('Unauthorized. Please login again.');
+    }
+    final userId = _readText(result.first[0]);
+    final user = await _getUserById(userId);
+    if (user == null) {
+      throw StateError('User not found.');
+    }
+    return user;
+  }
+
   Future<void> _addColumnIfMissing({
     required String table,
     required String column,
@@ -416,7 +586,9 @@ class MySqlWasteDataService implements WasteDataService {
     await _seedForumPostsIfNeeded();
     await _seedMessagesIfNeeded();
     await _seedProfileIfNeeded();
+    await _seedDefaultAccountIfNeeded();
     await _seedAdditionalUsersIfNeeded();
+    await _seedAdditionalAccountsIfNeeded();
     await _seedChatIfNeeded();
     await _seedEcoActionCatalogIfNeeded();
     await _seedBadgesIfNeeded();
@@ -721,8 +893,8 @@ class MySqlWasteDataService implements WasteDataService {
     await _connection.query(
       '''
       INSERT INTO app_users (
-        id, name, email, city, level, green_score, total_recycled_kg, avatar_initials, total_co2_reduction_kg
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, name, email, city, level, green_score, total_recycled_kg, avatar_initials, avatar_url, password_hash, total_co2_reduction_kg
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ''',
       [
         user.id,
@@ -733,8 +905,18 @@ class MySqlWasteDataService implements WasteDataService {
         user.greenScore,
         user.totalRecycledKg,
         user.avatarInitials,
+        null,
+        '',
         user.totalCo2ReductionKg,
       ],
+    );
+  }
+
+  Future<void> _seedDefaultAccountIfNeeded() async {
+    await _upsertAccount(
+      userId: _defaultUserId,
+      email: 'alex.green@example.com',
+      password: '123456',
     );
   }
 
@@ -786,8 +968,8 @@ class MySqlWasteDataService implements WasteDataService {
       await _connection.query(
         '''
         INSERT INTO app_users (
-          id, name, email, city, level, green_score, total_recycled_kg, avatar_initials, total_co2_reduction_kg
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, name, email, city, level, green_score, total_recycled_kg, avatar_initials, avatar_url, password_hash, total_co2_reduction_kg
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
         [
           user.id,
@@ -798,10 +980,30 @@ class MySqlWasteDataService implements WasteDataService {
           user.greenScore,
           user.totalRecycledKg,
           user.avatarInitials,
+          null,
+          '',
           user.totalCo2ReductionKg,
         ],
       );
     }
+  }
+
+  Future<void> _seedAdditionalAccountsIfNeeded() async {
+    await _upsertAccount(
+      userId: 'u2',
+      email: 'mia.chen@example.com',
+      password: '123456',
+    );
+    await _upsertAccount(
+      userId: 'u3',
+      email: 'leo.wang@example.com',
+      password: '123456',
+    );
+    await _upsertAccount(
+      userId: 'u4',
+      email: 'ava.smith@example.com',
+      password: '123456',
+    );
   }
 
   Future<void> _seedChatIfNeeded() async {
@@ -1728,12 +1930,311 @@ class MySqlWasteDataService implements WasteDataService {
   }
 
   @override
-  Future<AppUser> getProfile() async {
-    final user = await _getUserById(_defaultUserId);
+  Future<AppUser> getProfile({required String userId}) async {
+    final user = await _getUserById(userId);
     if (user == null) {
       throw StateError('No user profile data found in app_users.');
     }
     return user;
+  }
+
+  @override
+  Future<AppUser> updateProfile({
+    required String userId,
+    required String name,
+    required String email,
+    required String city,
+  }) async {
+    final safeName = name.trim();
+    final safeEmail = email.trim().toLowerCase();
+    final safeCity = city.trim();
+    if (safeName.isEmpty || safeEmail.isEmpty || safeCity.isEmpty) {
+      throw StateError('name, email and city are required.');
+    }
+    if (!safeEmail.contains('@')) {
+      throw StateError('email format is invalid.');
+    }
+
+    final user = await _getUserById(userId);
+    if (user == null) {
+      throw StateError('User not found: $userId');
+    }
+
+    final duplicate = await _connection.query(
+      '''
+      SELECT user_id
+      FROM user_accounts
+      WHERE email = ? AND user_id <> ?
+      LIMIT 1
+      ''',
+      [safeEmail, userId],
+    );
+    if (duplicate.isNotEmpty) {
+      throw StateError('email already registered by another account.');
+    }
+
+    await _connection.transaction((tx) async {
+      await tx.query(
+        '''
+        UPDATE app_users
+        SET
+          name = ?,
+          email = ?,
+          city = ?,
+          avatar_initials = ?
+        WHERE id = ?
+        ''',
+        [safeName, safeEmail, safeCity, _initialsFromName(safeName), userId],
+      );
+
+      await tx.query(
+        '''
+        UPDATE user_accounts
+        SET email = ?
+        WHERE user_id = ?
+        ''',
+        [safeEmail, userId],
+      );
+    });
+
+    final updated = await _getUserById(userId);
+    if (updated == null) {
+      throw StateError('Failed to load updated profile.');
+    }
+    return updated;
+  }
+
+  @override
+  Future<void> updateAvatar({
+    required String userId,
+    required String avatarUrl,
+  }) async {
+    final safeUrl = avatarUrl.trim();
+    if (safeUrl.isEmpty) {
+      throw StateError('avatarUrl is required.');
+    }
+    final user = await _getUserById(userId);
+    if (user == null) {
+      throw StateError('User not found: $userId');
+    }
+    await _connection.query(
+      'UPDATE app_users SET avatar_url = ? WHERE id = ?',
+      [safeUrl, userId],
+    );
+  }
+
+  @override
+  Future<void> changePassword({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final safeCurrent = currentPassword.trim();
+    final safeNew = newPassword.trim();
+    if (safeCurrent.isEmpty || safeNew.isEmpty) {
+      throw StateError('currentPassword and newPassword are required.');
+    }
+    if (safeNew.length < 6) {
+      throw StateError('newPassword must be at least 6 characters.');
+    }
+
+    final rows = await _connection.query(
+      '''
+      SELECT password_hash
+      FROM user_accounts
+      WHERE user_id = ?
+      LIMIT 1
+      ''',
+      [userId],
+    );
+    if (rows.isEmpty) {
+      throw StateError('User not found: $userId');
+    }
+    final storedHash = _readText(rows.first[0]);
+    if (!_verifyPassword(safeCurrent, storedHash)) {
+      throw StateError('Current password is incorrect.');
+    }
+
+    final nextHash = _hashPassword(safeNew);
+    await _connection.query(
+      '''
+      UPDATE user_accounts
+      SET password_hash = ?
+      WHERE user_id = ?
+      ''',
+      [nextHash, userId],
+    );
+  }
+
+  @override
+  Future<List<UserRecognitionRecord>> getRecognitionHistory({
+    required String userId,
+    int limit = 50,
+  }) async {
+    final safeLimit = limit.clamp(1, 200);
+    final result = await _connection.query(
+      '''
+      SELECT
+        id,
+        source_file_name,
+        image_url,
+        mapped_category_title,
+        rubbish_label,
+        rubbish_score,
+        DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+      FROM vision_classification_logs
+      WHERE submitted_by = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+      ''',
+      [userId, safeLimit],
+    );
+
+    return result
+        .map(
+          (row) => UserRecognitionRecord(
+            id: _readInt(row[0]),
+            fileName: _readText(row[1]),
+            imageUrl: _readText(row[2]),
+            categoryLabel: _readText(row[3]),
+            rubbishLabel: _readText(row[4]),
+            confidence: _readDouble(row[5]),
+            createdAt: _readText(row[6]),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<UserPointHistoryRecord>> getPointHistory({
+    required String userId,
+    int limit = 50,
+  }) async {
+    final safeLimit = limit.clamp(1, 300);
+    final result = await _connection.query(
+      '''
+      SELECT
+        id,
+        user_id,
+        change_amount,
+        transaction_type,
+        related_id,
+        remark,
+        DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+      FROM point_transactions
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+      ''',
+      [userId, safeLimit],
+    );
+
+    return result
+        .map(
+          (row) => UserPointHistoryRecord(
+            id: _readInt(row[0]),
+            userId: _readText(row[1]),
+            changeAmount: _readInt(row[2]),
+            transactionType: _readText(row[3]),
+            relatedId: _readNullableText(row[4]),
+            remark: _readNullableText(row[5]),
+            createdAt: _readText(row[6]),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<UserBadgeHistoryRecord>> getBadgeHistory({
+    required String userId,
+    int limit = 50,
+  }) async {
+    final safeLimit = limit.clamp(1, 300);
+    final result = await _connection.query(
+      '''
+      SELECT
+        ub.id,
+        ub.user_id,
+        ub.badge_id,
+        b.title,
+        b.icon,
+        b.required_points,
+        DATE_FORMAT(ub.redeemed_at, '%Y-%m-%d %H:%i:%s') AS redeemed_at
+      FROM user_badges ub
+      INNER JOIN badges b ON b.id = ub.badge_id
+      WHERE ub.user_id = ?
+      ORDER BY ub.redeemed_at DESC
+      LIMIT ?
+      ''',
+      [userId, safeLimit],
+    );
+
+    return result
+        .map(
+          (row) => UserBadgeHistoryRecord(
+            id: _readInt(row[0]),
+            userId: _readText(row[1]),
+            badgeId: _readText(row[2]),
+            badgeTitle: _readText(row[3]),
+            badgeIcon: _readText(row[4]),
+            requiredPoints: _readInt(row[5]),
+            redeemedAt: _readText(row[6]),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<ForumPost>> getUserForumPosts({
+    required String userId,
+    int limit = 50,
+  }) async {
+    final safeLimit = limit.clamp(1, 300);
+    final result = await _connection.query(
+      '''
+      SELECT
+        p.id,
+        COALESCE(p.author_id, '') AS author_id,
+        p.author,
+        p.title,
+        p.content,
+        p.tag,
+        p.likes,
+        (
+          SELECT COUNT(*)
+          FROM forum_comments c
+          WHERE c.post_id = p.id
+        ) AS replies,
+        p.created_at,
+        EXISTS(
+          SELECT 1
+          FROM forum_post_likes l
+          WHERE l.post_id = p.id AND l.user_id = ?
+        ) AS liked_by_me
+      FROM forum_posts p
+      WHERE p.author_id = ?
+      ORDER BY p.created_at DESC
+      LIMIT ?
+      ''',
+      [userId, userId, safeLimit],
+    );
+
+    return result
+        .map(
+          (row) => ForumPost(
+            id: _readText(row[0]),
+            authorId: _readText(row[1]),
+            author: _readText(row[2]),
+            title: _readText(row[3]),
+            content: _readText(row[4]),
+            tag: _readText(row[5]),
+            likes: _readInt(row[6]),
+            replies: _readInt(row[7]),
+            createdAt: _readText(row[8]),
+            likedByMe: _readBool(row[9]),
+          ),
+        )
+        .toList(growable: false);
   }
 
   @override
@@ -2288,7 +2789,7 @@ class MySqlWasteDataService implements WasteDataService {
     final result = await _connection.query(
       '''
       SELECT
-        id, name, email, city, level, green_score, total_recycled_kg, avatar_initials, total_co2_reduction_kg
+        id, name, email, city, level, green_score, total_recycled_kg, avatar_initials, avatar_url, total_co2_reduction_kg
       FROM app_users
       WHERE id = ?
       LIMIT 1
@@ -2309,8 +2810,105 @@ class MySqlWasteDataService implements WasteDataService {
       greenScore: _readInt(row[5]),
       totalRecycledKg: _readDouble(row[6]),
       avatarInitials: row[7] as String,
-      totalCo2ReductionKg: _readDouble(row[8]),
+      avatarUrl: _readNullableText(row[8]),
+      totalCo2ReductionKg: _readDouble(row[9]),
     );
+  }
+
+  Future<void> _upsertAccount({
+    required String userId,
+    required String email,
+    required String password,
+  }) async {
+    final safeEmail = email.trim().toLowerCase();
+    final exists = await _connection.query(
+      'SELECT COUNT(*) AS count FROM user_accounts WHERE user_id = ?',
+      [userId],
+    );
+    if (_readInt(exists.first.fields['count']) > 0) {
+      await _connection.query(
+        '''
+        UPDATE user_accounts
+        SET email = ?, password_hash = ?
+        WHERE user_id = ?
+        ''',
+        [safeEmail, _hashPassword(password), userId],
+      );
+      return;
+    }
+
+    await _connection.query(
+      '''
+      INSERT INTO user_accounts (user_id, email, password_hash, created_at)
+      VALUES (?, ?, ?, NOW())
+      ''',
+      [userId, safeEmail, _hashPassword(password)],
+    );
+  }
+
+  Future<AuthSession> _createSessionForUser(String userId) async {
+    final user = await _getUserById(userId);
+    if (user == null) {
+      throw StateError('User not found.');
+    }
+    final token = _generateToken();
+    final expiresAt = DateTime.now().add(const Duration(days: 7));
+    final expiresAtText = _formatDateTime(expiresAt);
+
+    await _connection.query(
+      '''
+      INSERT INTO auth_sessions (token, user_id, expires_at, created_at)
+      VALUES (?, ?, ?, NOW())
+      ''',
+      [token, userId, expiresAtText],
+    );
+
+    return AuthSession(
+      token: token,
+      expiresAt: expiresAt.toIso8601String(),
+      user: user,
+    );
+  }
+
+  String _hashPassword(String raw) {
+    final bytes = utf8.encode(raw);
+    return sha256.convert(bytes).toString();
+  }
+
+  bool _verifyPassword(String raw, String hash) {
+    return _hashPassword(raw) == hash;
+  }
+
+  String _generateToken() {
+    final bytes = List<int>.generate(32, (_) => _secureRandom.nextInt(256));
+    return base64Url.encode(bytes).replaceAll('=', '');
+  }
+
+  String _newUserId() {
+    return 'u${DateTime.now().microsecondsSinceEpoch}';
+  }
+
+  String _buildAvatarInitials(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) {
+      return 'U';
+    }
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    final first = parts.first.substring(0, 1);
+    final last = parts.last.substring(0, 1);
+    return '$first$last'.toUpperCase();
+  }
+
+  String _formatDateTime(DateTime value) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${value.year}-${two(value.month)}-${two(value.day)} '
+        '${two(value.hour)}:${two(value.minute)}:${two(value.second)}';
   }
 
   Future<ChatMessage> _sendChatMessage({
@@ -2490,6 +3088,21 @@ class MySqlWasteDataService implements WasteDataService {
     final now = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
     return '${now.year}-${two(now.month)}-${two(now.day)} ${two(now.hour)}:${two(now.minute)}:${two(now.second)}';
+  }
+
+  String _initialsFromName(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) {
+      return 'U';
+    }
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
   }
 
   List<ForumComment> _buildCommentTree(List<ForumComment> flat) {

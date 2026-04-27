@@ -5,6 +5,19 @@ import '../models/vision_models.dart';
 ///
 /// Implementations may use MySQL, mock data, or another persistence mechanism.
 abstract class WasteDataService {
+  Future<AuthSession> register({
+    required String name,
+    required String email,
+    required String password,
+  });
+
+  Future<AuthSession> login({
+    required String email,
+    required String password,
+  });
+
+  Future<AppUser> requireUserByToken(String token);
+
   Future<List<WasteCategory>> getCategories();
 
   Future<List<EcoAction>> getEcoActions();
@@ -77,7 +90,45 @@ abstract class WasteDataService {
     required String conversationId,
   });
 
-  Future<AppUser> getProfile();
+  Future<AppUser> getProfile({required String userId});
+
+  Future<AppUser> updateProfile({
+    required String userId,
+    required String name,
+    required String email,
+    required String city,
+  });
+
+  Future<void> updateAvatar({
+    required String userId,
+    required String avatarUrl,
+  });
+
+  Future<void> changePassword({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+  });
+
+  Future<List<UserRecognitionRecord>> getRecognitionHistory({
+    required String userId,
+    int limit = 50,
+  });
+
+  Future<List<UserPointHistoryRecord>> getPointHistory({
+    required String userId,
+    int limit = 50,
+  });
+
+  Future<List<UserBadgeHistoryRecord>> getBadgeHistory({
+    required String userId,
+    int limit = 50,
+  });
+
+  Future<List<ForumPost>> getUserForumPosts({
+    required String userId,
+    int limit = 50,
+  });
 
   Future<List<EcoActionCatalogItem>> getEcoActionCatalog();
 

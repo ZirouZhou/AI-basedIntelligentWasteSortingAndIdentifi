@@ -28,7 +28,12 @@ import '../features/rewards/rewards_page.dart';
 /// The persistent shell that holds the bottom navigation bar and the six
 /// top-level feature pages.
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  const AppShell({
+    super.key,
+    required this.userId,
+  });
+
+  final String userId;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -39,23 +44,23 @@ class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
 
   /// The six top-level pages, built once and kept alive by [IndexedStack].
-  static const _pages = <Widget>[
-    HomePage(),
-    ClassifyPage(),
-    RewardsPage(),
-    CommunityPage(),
-    MessagesPage(),
-    ProfilePage(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final pages = <Widget>[
+      HomePage(userId: widget.userId),
+      ClassifyPage(userId: widget.userId),
+      RewardsPage(userId: widget.userId),
+      CommunityPage(userId: widget.userId),
+      MessagesPage(userId: widget.userId),
+      ProfilePage(userId: widget.userId),
+    ];
+
     return Scaffold(
       // Body: display only the selected page, but keep all pages alive.
       body: SafeArea(
         child: IndexedStack(
           index: _selectedIndex,
-          children: _pages,
+          children: pages,
         ),
       ),
       // Material 3 bottom navigation bar.

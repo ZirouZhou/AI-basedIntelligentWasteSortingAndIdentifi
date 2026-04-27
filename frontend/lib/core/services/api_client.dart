@@ -17,6 +17,7 @@ import '../models/chat_models.dart';
 import '../models/eco_action.dart';
 import '../models/eco_reward_models.dart';
 import '../models/forum_post.dart';
+import '../models/profile_history_models.dart';
 import '../models/reward.dart';
 import '../models/weather_info.dart';
 import '../models/waste_category.dart';
@@ -29,6 +30,48 @@ class ApiClient {
 
   final http.Client _http;
   final Duration _timeout;
+  static String? _sharedAuthToken;
+
+  String? get authToken => _sharedAuthToken;
+
+  void setAuthToken(String? token) {
+    _sharedAuthToken = token?.trim();
+  }
+
+  void clearAuthToken() {
+    _sharedAuthToken = null;
+  }
+
+  Future<AuthSessionModel> register({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    final body = await _postJson('/auth/register', {
+      'name': name,
+      'email': email,
+      'password': password,
+    }, includeAuth: false);
+    final session = AuthSessionModel.fromJson(
+      jsonDecode(body) as Map<String, dynamic>,
+    );
+    return session;
+  }
+
+  Future<AuthSessionModel> login({
+    required String email,
+    required String password,
+  }) async {
+    final body = await _postJson('/auth/login', {
+      'email': email,
+      'password': password,
+    }, includeAuth: false);
+    final session = AuthSessionModel.fromJson(
+      jsonDecode(body) as Map<String, dynamic>,
+    );
+    setAuthToken(session.token);
+    return session;
+  }
 
   /// Closes the underlying HTTP client and releases resources.
   void dispose() {
@@ -72,6 +115,78 @@ class ApiClient {
   Future<AppUser> fetchProfile(String userId) async {
     final body = await _get('/profile');
     return AppUser.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  Future<AppUser> updateProfile({
+    required String userId,
+    required String name,
+    required String email,
+    required String city,
+  }) async {
+    final body = await _postJson('/profile/update', {
+      'name': name,
+      'email': email,
+      'city': city,
+    });
+    return AppUser.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  Future<void> updateAvatar({
+    required String userId,
+    required String avatarUrl,
+  }) async {
+    await _postJson('/profile/avatar', {
+      'avatarUrl': avatarUrl,
+    });
+  }
+
+  Future<void> changePassword({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await _postJson('/profile/change-password', {
+      'currentPassword': currentPassword,
+      'newPassword': newPassword,
+    });
+  }
+
+  Future<List<RecognitionHistoryRecord>> fetchRecognitionHistory({
+    required String userId,
+    int limit = 50,
+  }) async {
+    final body = await _get('/profile/recognition-history?limit=$limit');
+    final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
+    return list
+        .map(RecognitionHistoryRecord.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<List<PointHistoryRecord>> fetchPointHistory({
+    required String userId,
+    int limit = 50,
+  }) async {
+    final body = await _get('/profile/point-history?limit=$limit');
+    final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
+    return list.map(PointHistoryRecord.fromJson).toList(growable: false);
+  }
+
+  Future<List<BadgeHistoryRecord>> fetchBadgeHistory({
+    required String userId,
+    int limit = 50,
+  }) async {
+    final body = await _get('/profile/badge-history?limit=$limit');
+    final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
+    return list.map(BadgeHistoryRecord.fromJson).toList(growable: false);
+  }
+
+  Future<List<ForumPost>> fetchUserForumPosts({
+    required String userId,
+    int limit = 50,
+  }) async {
+    final body = await _get('/profile/forum-posts?limit=$limit');
+    final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
+    return list.map(ForumPost.fromJson).toList(growable: false);
   }
 
   /// Fetches the eco actions for the current user.
@@ -161,7 +276,7 @@ class ApiClient {
   Future<List<ChatConversationSummary>> fetchChatConversations({
     required String userId,
   }) async {
-    final body = await _get('/chat/conversations?userId=$userId');
+    final body = await _get('/chat/conversations');
     final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
     return list
         .map(ChatConversationSummary.fromJson)
@@ -174,7 +289,6 @@ class ApiClient {
     required String peerUserId,
   }) async {
     final body = await _postJson('/chat/conversations/direct', {
-      'userId': userId,
       'peerUserId': peerUserId,
     });
     final json = jsonDecode(body) as Map<String, dynamic>;
@@ -190,7 +304,7 @@ class ApiClient {
   }) async {
     final afterPart = afterMessageId == null ? '' : '&afterMessageId=$afterMessageId';
     final body = await _get(
-      '/chat/messages?userId=$userId&conversationId=$conversationId&limit=$limit$afterPart',
+      '/chat/messages?conversationId=$conversationId&limit=$limit$afterPart',
     );
     final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
     return list.map(ChatMessage.fromJson).toList(growable: false);
@@ -203,7 +317,6 @@ class ApiClient {
     required String content,
   }) async {
     final body = await _postJson('/chat/messages/text', {
-      'userId': userId,
       'conversationId': conversationId,
       'content': content,
     });
@@ -217,7 +330,6 @@ class ApiClient {
     required String imageUrl,
   }) async {
     final body = await _postJson('/chat/messages/image', {
-      'userId': userId,
       'conversationId': conversationId,
       'imageUrl': imageUrl,
     });
@@ -230,7 +342,6 @@ class ApiClient {
     required String conversationId,
   }) async {
     await _postJson('/chat/conversations/read', {
-      'userId': userId,
       'conversationId': conversationId,
     });
   }
@@ -249,7 +360,7 @@ class ApiClient {
     required String userId,
     int limit = 20,
   }) async {
-    final body = await _get('/eco-actions/history?userId=$userId&limit=$limit');
+    final body = await _get('/eco-actions/history?limit=$limit');
     final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
     return list
         .map((item) => EcoActionRecord.fromJson(item))
@@ -264,7 +375,6 @@ class ApiClient {
     String? note,
   }) async {
     final body = await _postJson('/eco-actions/evaluate', {
-      'userId': userId,
       'catalogActionId': catalogActionId,
       'quantity': quantity,
       if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
@@ -276,7 +386,7 @@ class ApiClient {
 
   /// Fetches redeemable/redeemed badges for one user.
   Future<List<BadgeItem>> fetchBadges({required String userId}) async {
-    final body = await _get('/badges?userId=$userId');
+    final body = await _get('/badges');
     final list = (jsonDecode(body) as List).cast<Map<String, dynamic>>();
     return list.map(BadgeItem.fromJson).toList(growable: false);
   }
@@ -287,7 +397,6 @@ class ApiClient {
     required String badgeId,
   }) async {
     final body = await _postJson('/badges/redeem', {
-      'userId': userId,
       'badgeId': badgeId,
     });
     return BadgeRedeemResult.fromJson(jsonDecode(body) as Map<String, dynamic>);
@@ -295,7 +404,7 @@ class ApiClient {
 
   /// Fetches eco reward dashboard summary.
   Future<EcoDashboard> fetchEcoDashboard({required String userId}) async {
-    final body = await _get('/eco-dashboard?userId=$userId');
+    final body = await _get('/eco-dashboard');
     return EcoDashboard.fromJson(jsonDecode(body) as Map<String, dynamic>);
   }
 
@@ -366,11 +475,15 @@ class ApiClient {
     );
   }
 
-  Future<String> _get(String path) async {
+  Future<String> _get(String path, {bool includeAuth = true}) async {
     final uri = Uri.parse('${AppConfig.baseUrl}$path');
+    final headers = <String, String>{'Accept': 'application/json'};
+    if (includeAuth && _sharedAuthToken != null && _sharedAuthToken!.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $_sharedAuthToken';
+    }
     final response = await _http.get(
       uri,
-      headers: {'Accept': 'application/json'},
+      headers: headers,
     ).timeout(_timeout);
 
     if (response.statusCode != 200) {
@@ -381,15 +494,23 @@ class ApiClient {
     return response.body;
   }
 
-  Future<String> _postJson(String path, Map<String, dynamic> payload) async {
+  Future<String> _postJson(
+    String path,
+    Map<String, dynamic> payload, {
+    bool includeAuth = true,
+  }) async {
     final uri = Uri.parse('${AppConfig.baseUrl}$path');
+    final headers = <String, String>{
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+    if (includeAuth && _sharedAuthToken != null && _sharedAuthToken!.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $_sharedAuthToken';
+    }
     final response = await _http
         .post(
           uri,
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
+          headers: headers,
           body: jsonEncode(payload),
         )
         .timeout(_timeout);
@@ -427,4 +548,24 @@ class WeatherNoDataException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class AuthSessionModel {
+  const AuthSessionModel({
+    required this.token,
+    required this.expiresAt,
+    required this.user,
+  });
+
+  final String token;
+  final String expiresAt;
+  final AppUser user;
+
+  factory AuthSessionModel.fromJson(Map<String, dynamic> json) {
+    return AuthSessionModel(
+      token: json['token'] as String,
+      expiresAt: json['expiresAt'] as String? ?? '',
+      user: AppUser.fromJson(json['user'] as Map<String, dynamic>),
+    );
+  }
 }

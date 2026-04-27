@@ -26,6 +26,8 @@ class AppUser {
     required this.greenScore,
     required this.totalRecycledKg,
     required this.avatarInitials,
+    this.avatarUrl,
+    this.totalCo2ReductionKg = 0,
   });
 
   final String id;
@@ -36,6 +38,8 @@ class AppUser {
   final int greenScore;
   final double totalRecycledKg;
   final String avatarInitials;
+  final String? avatarUrl;
+  final double totalCo2ReductionKg;
 
   /// Constructs an [AppUser] from a JSON map received from the backend.
   factory AppUser.fromJson(Map<String, dynamic> json) {
@@ -48,6 +52,9 @@ class AppUser {
       greenScore: json['greenScore'] as int,
       totalRecycledKg: (json['totalRecycledKg'] as num).toDouble(),
       avatarInitials: json['avatarInitials'] as String,
+      avatarUrl: json['avatarUrl'] as String?,
+      totalCo2ReductionKg:
+          (json['totalCo2ReductionKg'] as num?)?.toDouble() ?? 0,
     );
   }
 }

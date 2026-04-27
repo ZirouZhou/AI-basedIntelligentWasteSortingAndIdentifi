@@ -393,6 +393,31 @@ class ChatMessage {
 }
 
 // ------------------------------------------------------------------------------------------------
+// AuthSession
+// ------------------------------------------------------------------------------------------------
+
+/// Authentication payload returned by register/login endpoints.
+class AuthSession {
+  const AuthSession({
+    required this.token,
+    required this.expiresAt,
+    required this.user,
+  });
+
+  final String token;
+  final String expiresAt;
+  final AppUser user;
+
+  JsonMap toJson() {
+    return {
+      'token': token,
+      'expiresAt': expiresAt,
+      'user': user.toJson(),
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
 // AppUser
 // ------------------------------------------------------------------------------------------------
 
@@ -416,6 +441,7 @@ class AppUser {
     required this.greenScore,
     required this.totalRecycledKg,
     required this.avatarInitials,
+    this.avatarUrl,
     this.totalCo2ReductionKg = 0,
   });
 
@@ -427,6 +453,7 @@ class AppUser {
   final int greenScore;
   final double totalRecycledKg;
   final String avatarInitials;
+  final String? avatarUrl;
   final double totalCo2ReductionKg;
 
   /// Serialises this user profile to a JSON-compatible map.
@@ -440,7 +467,119 @@ class AppUser {
       'greenScore': greenScore,
       'totalRecycledKg': totalRecycledKg,
       'avatarInitials': avatarInitials,
+      'avatarUrl': avatarUrl,
       'totalCo2ReductionKg': totalCo2ReductionKg,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// UserRecognitionRecord
+// ------------------------------------------------------------------------------------------------
+
+/// One image-recognition history record for a user.
+class UserRecognitionRecord {
+  const UserRecognitionRecord({
+    required this.id,
+    required this.fileName,
+    required this.imageUrl,
+    required this.categoryLabel,
+    required this.rubbishLabel,
+    required this.confidence,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String fileName;
+  final String imageUrl;
+  final String categoryLabel;
+  final String rubbishLabel;
+  final double confidence;
+  final String createdAt;
+
+  JsonMap toJson() {
+    return {
+      'id': id,
+      'fileName': fileName,
+      'imageUrl': imageUrl,
+      'categoryLabel': categoryLabel,
+      'rubbishLabel': rubbishLabel,
+      'confidence': confidence,
+      'createdAt': createdAt,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// UserPointHistoryRecord
+// ------------------------------------------------------------------------------------------------
+
+/// One point change record in user reward history.
+class UserPointHistoryRecord {
+  const UserPointHistoryRecord({
+    required this.id,
+    required this.userId,
+    required this.changeAmount,
+    required this.transactionType,
+    this.relatedId,
+    this.remark,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String userId;
+  final int changeAmount;
+  final String transactionType;
+  final String? relatedId;
+  final String? remark;
+  final String createdAt;
+
+  JsonMap toJson() {
+    return {
+      'id': id,
+      'userId': userId,
+      'changeAmount': changeAmount,
+      'transactionType': transactionType,
+      'relatedId': relatedId,
+      'remark': remark,
+      'createdAt': createdAt,
+    };
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// UserBadgeHistoryRecord
+// ------------------------------------------------------------------------------------------------
+
+/// One redeemed badge record in user reward history.
+class UserBadgeHistoryRecord {
+  const UserBadgeHistoryRecord({
+    required this.id,
+    required this.userId,
+    required this.badgeId,
+    required this.badgeTitle,
+    required this.badgeIcon,
+    required this.requiredPoints,
+    required this.redeemedAt,
+  });
+
+  final int id;
+  final String userId;
+  final String badgeId;
+  final String badgeTitle;
+  final String badgeIcon;
+  final int requiredPoints;
+  final String redeemedAt;
+
+  JsonMap toJson() {
+    return {
+      'id': id,
+      'userId': userId,
+      'badgeId': badgeId,
+      'badgeTitle': badgeTitle,
+      'badgeIcon': badgeIcon,
+      'requiredPoints': requiredPoints,
+      'redeemedAt': redeemedAt,
     };
   }
 }

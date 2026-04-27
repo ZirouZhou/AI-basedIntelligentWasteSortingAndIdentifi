@@ -10,7 +10,12 @@ import '../../core/theme/app_theme.dart';
 ///
 /// Adds a UK weather section powered by AMap weather API.
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({
+    super.key,
+    required this.userId,
+  });
+
+  final String userId;
 
   @override
   State<HomePage> createState() => _HomePageState();
