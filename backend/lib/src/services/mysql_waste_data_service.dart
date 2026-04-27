@@ -2737,10 +2737,10 @@ class MySqlWasteDataService implements WasteDataService {
 
   WasteCategory _toWasteCategory(ResultRow row) {
     return WasteCategory(
-      id: row[0] as String,
-      title: row[1] as String,
-      description: row[2] as String,
-      binColor: row[3] as String,
+      id: _readText(row[0]),
+      title: _readText(row[1]),
+      description: _readText(row[2]),
+      binColor: _readText(row[3]),
       examples: _readStringList(row[4]),
       recyclingTips: _readStringList(row[5]),
     );
@@ -3018,7 +3018,11 @@ class MySqlWasteDataService implements WasteDataService {
     if (value == null) {
       return const [];
     }
-    final decoded = jsonDecode(value as String);
+    final text = _readText(value);
+    if (text.trim().isEmpty) {
+      return const [];
+    }
+    final decoded = jsonDecode(text);
     if (decoded is! List) {
       return const [];
     }
