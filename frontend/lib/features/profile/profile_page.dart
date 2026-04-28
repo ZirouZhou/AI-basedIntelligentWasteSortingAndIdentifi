@@ -404,10 +404,37 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  ImageProvider<Object>? _resolveAvatarImage(String? avatarUrl) {
+    final value = avatarUrl?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+
+    if (value.startsWith('data:')) {
+      final commaIndex = value.indexOf(',');
+      if (commaIndex <= 0 || commaIndex == value.length - 1) {
+        return null;
+      }
+      final base64Part = value.substring(commaIndex + 1);
+      try {
+        return MemoryImage(base64Decode(base64Part));
+      } on FormatException {
+        return null;
+      }
+    }
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return NetworkImage(value);
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final user = _user;
+    final avatarImage = _resolveAvatarImage(user?.avatarUrl);
 
     return RefreshIndicator(
       onRefresh: _loadAll,
@@ -446,10 +473,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           child: CircleAvatar(
                             radius: 36,
                             backgroundColor: AppTheme.seed,
-                            backgroundImage: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
-                                ? NetworkImage(user.avatarUrl!)
-                                : null,
-                            child: (user.avatarUrl == null || user.avatarUrl!.isEmpty)
+                            backgroundImage: avatarImage,
+                            child: avatarImage == null
                                 ? Text(
                                     user.avatarInitials,
                                     style: textTheme.titleLarge?.copyWith(color: Colors.white),
