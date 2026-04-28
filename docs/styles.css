@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #f4f8ef;
   --surface: #ffffff;
   --surface-soft: #ecf5e6;
@@ -368,4 +368,19 @@ code {
   .section {
     padding: 54px 0;
   }
+}
+
+.demo-card__status {
+  margin: 10px 2px 2px;
+  font-size: 0.92rem;
+  color: #355a47;
+}
+
+.demo-card__status--ok {
+  color: #1d7f46;
+}
+
+.demo-card__status--error {
+  color: #8d2f2f;
+  font-weight: 600;
 }
