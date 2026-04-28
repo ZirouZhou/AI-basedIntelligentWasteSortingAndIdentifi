@@ -1,165 +1,334 @@
-# EcoSort AI
+<p align="center">
+  <img src="https://img.shields.io/badge/Dart-3.4+-0175C2?style=for-the-badge&logo=dart&logoColor=white" alt="Dart 3.4+">
+  <img src="https://img.shields.io/badge/Flutter-3.4+-02569B?style=for-the-badge&logo=flutter&logoColor=white" alt="Flutter 3.4+">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License: MIT">
+  <img src="https://img.shields.io/badge/Status-Prototype-brightgreen?style=for-the-badge" alt="Status: Prototype">
+</p>
 
-AI-Based Intelligent Waste Sorting and Identification App built with Flutter (frontend) and Dart Shelf + MySQL (backend).
+<h1 align="center">🌿 EcoSort AI</h1>
+<h3 align="center">AI-Based Intelligent Waste Sorting & Identification App</h3>
 
-## Overview
+<p align="center">
+  <strong>A full-stack green-tech mobile application that helps users sort waste intelligently, earn eco-rewards, and build sustainable communities — powered by Dart & Flutter.</strong>
+</p>
 
-EcoSort AI is a green-tech educational application focused on:
+---
 
-- intelligent waste sorting guidance
-- eco behavior assessment and rewards
-- community participation (forum + direct chat)
-- user profile and activity history
+## 📖 Table of Contents
 
-The app keeps six core modules in navigation:
+- [Overview](#-overview)
+- [Features](#-features)
+- [Project Architecture](#-project-architecture)
+- [Tech Stack](#-tech-stack)
+- [Screens & Modules](#-screens--modules)
+- [Getting Started](#-getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Running the Backend](#running-the-backend)
+  - [Running the Frontend](#running-the-frontend)
+- [API Reference](#-api-reference)
+- [Project Structure](#-project-structure)
+- [Roadmap](#-roadmap)
+- [Environment Variables](#-environment-variables)
+- [Database Schema](#-database-schema)
+- [Contributing](#-contributing)
+- [License](#-license)
 
-1. Home
-2. Classify
-3. Rewards
-4. Forum
-5. Messages
-6. Profile
+---
 
-## Current Architecture
+## 🌍 Overview
+
+**EcoSort AI** is an intelligent waste sorting assistant designed to promote environmental sustainability through technology. The application helps users identify the correct waste category for everyday items, tracks their eco-friendly actions, awards points that can be redeemed for rewards, and fosters community engagement through a built-in forum.
+
+The current prototype uses a **keyword-based classification engine** as a stand-in for AI, making it easy to replace with a real machine-learning model, computer vision API, or cloud-based AI service in future iterations.
+
+> 🎯 **Goal**: Make waste sorting simple, rewarding, and community-driven — one scan at a time.
+
+---
+
+## ✨ Features
+
+### Core Capabilities
+
+| Module | Description |
+|---|---|
+| 🏠 **Home** | Dashboard with quick stats, green score overview, and recent eco-actions |
+| 🤖 **AI Classification** | Classify waste items by name or image; view category details and disposal tips |
+| 🌱 **Eco Assessment & Rewards** | Track completed eco-actions, earn points, and redeem rewards like coupons and badges |
+| 💬 **Community Forum** | Browse and participate in discussions about waste sorting, volunteering, and environmental topics |
+| ✉️ **Messages** | In-app notifications and message threads from EcoSort AI, clubs, and the reward center |
+| 👤 **Profile** | User profile with green score, total recycled weight, level, and activity history |
+
+### Waste Categories
+
+| Category | Bin Color | Examples |
+|---|---|---|
+| ♻️ **Recyclable** | Blue | Plastic bottles, cardboard, glass jars, aluminum cans |
+| 🍃 **Organic** | Green | Fruit peels, vegetable scraps, tea leaves, eggshells |
+| ☣️ **Hazardous** | Red | Batteries, paint, medicine, pesticide bottles |
+| 🗑️ **Residual** | Gray | Used tissues, ceramics, dust, contaminated packaging |
+
+### Smart Classification Engine
+
+- **Keyword matching** classifies items in real time with confidence scoring
+- Examples: `"plastic bottle"` → Recyclable (94%), `"banana peel"` → Organic (94%)
+- Designed as a pluggable module — swap in a real AI/ML model when ready
+
+---
+
+## 🏗 Project Architecture
 
 ```text
-Flutter App (frontend)
-  -> Auth + AppShell (6 tabs)
-  -> ApiClient (centralized REST client)
-  -> feature pages (classify/rewards/forum/messages/profile)
-
-HTTP/JSON
-
-Dart Shelf Backend (backend)
-  -> routes.dart (REST routes + request validation)
-  -> WasteDataService contract
-  -> MySqlWasteDataService (production)
-  -> InMemoryWasteDataService (tests/mock)
-  -> AliyunVisionClient (image recognition integration)
-
-MySQL
-  -> auto create database/tables
-  -> seed demo data
-  -> store forum/chat/reward/profile/vision logs
+┌─────────────────────────────────────────────────┐
+│                   Flutter App                    │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
+│  │  Screens  │ │  Models  │ │  Services/State  │ │
+│  │ (6 pages) │ │ (Dart)   │ │  (API + Mock)    │ │
+│  └──────────┘ └──────────┘ └──────────────────┘ │
+└──────────────────────┬──────────────────────────┘
+                       │ HTTP (REST JSON)
+                       ▼
+┌─────────────────────────────────────────────────┐
+│              Dart Shelf Backend                  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
+│  │  Routes  │ │  Service │ │  Seed Data        │ │
+│  │ (REST)   │ │ (Logic)  │ │  (4 Categories)   │ │
+│  └──────────┘ └──────────┘ └──────────────────┘ │
+└─────────────────────────────────────────────────┘
 ```
 
-## Tech Stack
+The system follows a **client-server** architecture:
 
-### Frontend
+- **Frontend**: Flutter mobile app with feature-based folder structure, using `ApiClient` for HTTP communication and `MockData` for offline development previews
+- **Backend**: Lightweight Dart HTTP server built with the `shelf` package, exposing RESTful JSON endpoints and in-memory seed data
 
-- Flutter + Dart (SDK `>=3.4.0 <4.0.0`)
-- `http: ^1.2.2`
-- `image_picker: ^1.1.2`
+---
 
-### Backend
+## 🛠 Tech Stack
 
-- Dart (SDK `>=3.4.0 <4.0.0`)
-- `shelf: ^1.4.2`
-- `shelf_router: ^1.1.4`
-- `mysql1: ^0.20.0`
-- `http: ^1.2.2`
-- `crypto: ^3.0.3`
+### Frontend (Flutter)
 
-## Repository Structure
+| Dependency | Version | Purpose |
+|---|---|---|
+| `flutter` | SDK | Cross-platform UI framework |
+| `http` | ^1.2.2 | HTTP client for API communication |
+| `cupertino_icons` | ^1.0.8 | iOS-style icons |
+| `flutter_lints` | ^4.0.0 | Lint rules for code quality |
 
-```text
-.
-���� frontend/
-��  ���� lib/main.dart
-��  ���� lib/app/
-��  ��  ���� waste_sorting_app.dart
-��  ��  ���� app_shell.dart
-��  ���� lib/core/
-��  ��  ���� config/app_config.dart
-��  ��  ���� services/api_client.dart
-��  ��  ���� state/mock_data.dart
-��  ���� lib/features/
-��     ���� auth/
-��     ���� home/
-��     ���� classify/
-��     ���� rewards/
-��     ���� community/
-��     ���� messages/
-��     ���� profile/
-���� backend/
-��  ���� bin/server.dart
-��  ���� lib/src/
-��  ��  ���� server.dart
-��  ��  ���� routes.dart
-��  ��  ���� config/
-��  ��  ���� models/
-��  ��  ���� services/
-��  ��     ���� waste_data_service.dart
-��  ��     ���� mysql_waste_data_service.dart
-��  ��     ���� in_memory_waste_data_service.dart
-��  ��     ���� aliyun_vision_client.dart
-��  ���� test/
-���� dev-android.ps1
-���� AGENTS.md
+### Backend (Dart)
+
+| Dependency | Version | Purpose |
+|---|---|---|
+| `shelf` | ^1.4.2 | Modular HTTP server framework |
+| `shelf_router` | ^1.1.4 | Declarative route definitions |
+| `lints` | ^4.0.0 | Static analysis rules |
+| `test` | ^1.25.8 | Unit testing framework |
+
+### Development Tools
+
+- **Language**: Dart (SDK >=3.4.0 <4.0.0)
+- **UI Design**: Material Design 3
+- **Code Editor**: VS Code / Android Studio
+- **Version Control**: Git & GitHub
+
+---
+
+## 📱 Screens & Modules
+
+The app features a **bottom navigation bar** with six tabs:
+
+| # | Tab | Icon | Description |
+|---|---|---|---|
+| 1 | **Home** | 🏠 | Welcome dashboard with green score and quick actions |
+| 2 | **Classify** | 🤖 | AI-powered waste identification and category lookup |
+| 3 | **Rewards** | 🎁 | Eco-action tracking, point balance, and reward redemption |
+| 4 | **Community** | 💬 | Forum with posts about sorting tips, volunteer events, and campus news |
+| 5 | **Messages** | ✉️ | Notification inbox with read/unread status |
+| 6 | **Profile** | 👤 | User details, level, recycling statistics, and settings |
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+Ensure the following tools are installed on your development machine:
+
+- **[Dart SDK](https://dart.dev/get-dart)** (version >=3.4.0)
+- **[Flutter SDK](https://docs.flutter.dev/get-started/install)** (version >=3.4.0)
+- **Git** (for version control)
+- A **code editor** (VS Code or Android Studio recommended)
+- An **Android Emulator** or **iOS Simulator** (or a physical device)
+
+Verify your installation:
+
+```bash
+dart --version
+flutter --version
 ```
 
-## Getting Started
+### Running the Backend
 
-## Prerequisites
+1. **Navigate to the backend directory:**
 
-- Flutter SDK (`>=3.4.0`)
-- Dart SDK (`>=3.4.0`)
-- MySQL server
-- Android SDK + Emulator (for Android local run)
-
-## 1) Run Backend
-
-```powershell
+```bash
 cd backend
+```
+
+2. **Install dependencies:**
+
+```bash
 dart pub get
+```
+
+3. **Start the server:**
+
+```bash
 dart run bin/server.dart
 ```
 
-Default backend port is `8080` (or set `PORT`).
+If you want to enable Alibaba Cloud image classification, set credentials in
+environment variables before starting:
 
-Health check:
+```powershell
+$env:ALIYUN_ACCESS_KEY_ID="your_access_key_id"
+$env:ALIYUN_ACCESS_KEY_SECRET="your_access_key_secret"
+$env:ALIYUN_REGION_ID="cn-shanghai"
+dart run bin/server.dart
+```
+
+The API server will start at **`http://localhost:8080`**. You should see a confirmation message in the terminal.
+
+4. **Verify the server is running:**
 
 ```bash
 curl http://localhost:8080/health
 ```
 
-## 2) Run Frontend
+Expected response:
 
-```powershell
+```json
+{
+  "status": "ok",
+  "service": "EcoSort AI Backend",
+  "version": "0.1.0"
+}
+```
+
+### Running the Frontend
+
+1. **Navigate to the frontend directory:**
+
+```bash
 cd frontend
+```
+
+2. **Generate platform-specific files (first time only):**
+
+```bash
+flutter create .
+```
+
+3. **Install dependencies:**
+
+```bash
 flutter pub get
+```
+
+4. **Run the app:**
+
+```bash
+# For a connected device or emulator
+flutter run
+
+# For Android Emulator (use host alias to reach localhost backend)
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080
 ```
 
-Note:
-- Android emulator should use `10.0.2.2` to access host localhost.
-- Current fallback default in `app_config.dart` is `http://192.168.124.12:8080`; pass `--dart-define` explicitly for local runs.
+> 💡 **Note**: The Android Emulator uses `10.0.2.2` as an alias for the host machine's `localhost`. If you're running on a physical device, make sure both the device and the backend server are on the same network and use the host machine's actual IP address.
 
-## 3) One-Command Local Run (Windows)
+---
 
-Use the helper script in repository root:
+## 📡 API Reference
 
-```powershell
-.\dev-android.ps1
+### Base URL
+
+```text
+http://localhost:8080
 ```
 
-Common options:
+### Endpoints
 
-```powershell
-.\dev-android.ps1 -EmulatorName "Pixel_10_Pro_XL" -BackendPort 8080
-.\dev-android.ps1 -SkipRun
-.\dev-android.ps1 -ForceCompatibilityGpu
+| Method | Endpoint | Description | Response |
+|---|---|---|---|
+| `GET` | `/health` | Health check | `{ status, service, version }` |
+| `GET` | `/categories` | List all waste categories | `[{ id, title, description, binColor, examples, recyclingTips }]` |
+| `POST` | `/classify` | Classify a waste item by name | `{ itemName, category, confidence, suggestions }` |
+| `POST` | `/classify-image` | Classify waste from base64 image via Aliyun model | `{ itemName, category, confidence, suggestions }` |
+| `GET` | `/vision-logs` | Get latest image-recognition logs | `[{ requestId, imageUrl, elements, rawPayload }]` |
+| `GET` | `/eco-actions` | List eco-friendly actions | `[{ id, title, impact, points, completed }]` |
+| `GET` | `/rewards` | List available rewards | `[{ id, title, description, requiredPoints, redeemed }]` |
+| `GET` | `/forum-posts` | List community forum posts | `[{ id, author, title, content, tag, likes, replies, createdAt }]` |
+| `POST` | `/forum-posts` | Create a new forum post | `{ id, ... }` |
+| `POST` | `/forum-posts/:postId/like` | Toggle like for one post | `{ id, ... , likedByMe }` |
+| `GET` | `/forum-posts/:postId/comments?userId=u1` | List nested comments of one post | `[{ id, content, replies: [...] }]` |
+| `POST` | `/forum-posts/:postId/comments` | Create comment/reply | `{ id, postId, parentCommentId, ... }` |
+| `POST` | `/forum-comments/:commentId/like` | Toggle like for one comment | `{ id, likes, likedByMe, ... }` |
+| `GET` | `/messages` | List user message threads | `[{ id, sender, preview, updatedAt, unread }]` |
+| `GET` | `/profile` | Get current user profile | `{ id, name, email, city, level, greenScore, totalRecycledKg, avatarInitials }` |
+
+### Example: Classify a Waste Item
+
+**Request**
+
+```bash
+curl -X POST http://localhost:8080/classify \
+  -H "Content-Type: application/json" \
+  -d '{"itemName": "plastic bottle"}'
 ```
 
-What it does:
-- checks Java/Android SDK tools
-- starts backend (if not already running)
-- boots emulator and waits for readiness
-- runs Flutter with proper `API_BASE_URL`
+**Response**
+
+```json
+{
+  "itemName": "plastic bottle",
+  "category": {
+    "id": "recyclable",
+    "title": "Recyclable Waste",
+    "binColor": "Blue",
+    "description": "Clean paper, plastic, glass, and metal that can be reused.",
+    "examples": ["Plastic bottles", "Cardboard", "Glass jars", "Aluminum cans"],
+    "recyclingTips": [
+      "Rinse containers before disposal.",
+      "Flatten cardboard to save space."
+    ]
+  },
+  "confidence": 0.94,
+  "suggestions": [
+    "Rinse containers before disposal.",
+    "Flatten cardboard to save space."
+  ]
+}
+```
+
+### Example: Get Waste Categories
+
+```bash
+curl http://localhost:8080/categories
+```
+
+### Example: Classify an Image
+
+```bash
+curl -X POST http://localhost:8080/classify-image \
+  -H "Content-Type: application/json" \
+  -d "{\"fileName\":\"bottle.jpg\",\"imageBase64\":\"<BASE64_IMAGE_DATA>\",\"submittedBy\":\"u1\"}"
+```
+
+---
 
 ## Environment Variables
 
-## Backend Database (`DatabaseConfig.fromEnvironment`)
+### Backend (MySQL)
 
 - `DB_HOST` (default: `localhost`)
 - `DB_PORT` (default: `3308`)
@@ -168,119 +337,207 @@ What it does:
 - `DB_NAME` (default: `20260419_ai_intelligent_waste_sorting_identification_app`)
 - `DB_CHARSET` (default: `utf8`)
 
-## Backend Aliyun Vision
+### Backend (Aliyun Vision)
 
-Create `backend/.env.local` from `backend/.env.example`:
+- `ALIYUN_ACCESS_KEY_ID` (required for image classification)
+- `ALIYUN_ACCESS_KEY_SECRET` (required for image classification)
+- `ALIYUN_REGION_ID` (optional, default: `cn-shanghai`)
+
+### Frontend
+
+- `API_BASE_URL` (default Android emulator: `http://10.0.2.2:8080`)
+
+---
+
+## Database Schema
+
+The backend automatically creates all tables at startup.  
+Image recognition logs are stored in `vision_classification_logs`:
+
+```sql
+CREATE TABLE IF NOT EXISTS vision_classification_logs (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  submitted_by VARCHAR(128) NULL,
+  source_file_name VARCHAR(255) NOT NULL,
+  image_url TEXT NOT NULL,
+  request_id VARCHAR(128) NOT NULL,
+  category_label VARCHAR(128) NOT NULL,
+  category_score DOUBLE NOT NULL,
+  rubbish_label VARCHAR(255) NOT NULL,
+  rubbish_score DOUBLE NOT NULL,
+  mapped_category_id VARCHAR(32) NOT NULL,
+  mapped_category_title VARCHAR(128) NOT NULL,
+  raw_response_json LONGTEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_vision_logs_created (created_at DESC)
+);
+```
+
+Forum/community module uses these additional tables:
+
+```sql
+CREATE TABLE IF NOT EXISTS forum_post_likes (
+  post_id VARCHAR(32) NOT NULL,
+  user_id VARCHAR(32) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS forum_comments (
+  id VARCHAR(40) PRIMARY KEY,
+  post_id VARCHAR(32) NOT NULL,
+  parent_comment_id VARCHAR(40) NULL,
+  author_id VARCHAR(32) NULL,
+  author VARCHAR(128) NOT NULL,
+  content TEXT NOT NULL,
+  likes INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS forum_comment_likes (
+  comment_id VARCHAR(40) NOT NULL,
+  user_id VARCHAR(32) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (comment_id, user_id)
+);
+```
+
+---
+
+## 📁 Project Structure
 
 ```text
-ALIYUN_ACCESS_KEY_ID=your_access_key_id
-ALIYUN_ACCESS_KEY_SECRET=your_access_key_secret
-ALIYUN_REGION_ID=cn-shanghai
+AI-basedIntelligentWasteSortingAndIdentification/
+├── README.md                           # Project documentation
+├── .gitignore                          # Git ignore rules
+│
+├── backend/                            # Dart Shelf HTTP API Server
+│   ├── pubspec.yaml                    # Backend dependencies & metadata
+│   ├── analysis_options.yaml           # Dart static analysis config
+│   │
+│   ├── bin/
+│   │   └── server.dart                 # Server entry point
+│   │
+│   ├── lib/
+│   │   └── src/
+│   │       ├── server.dart             # Server setup & middleware
+│   │       ├── routes.dart             # REST API route definitions
+│   │       ├── models/
+│   │       │   └── app_models.dart     # Data models (Category, User, etc.)
+│   │       └── services/
+│   │           └── waste_data_service.dart  # Business logic & classification engine
+│   │
+│   └── test/
+│       └── waste_data_service_test.dart # Unit tests for the service layer
+│
+└── frontend/                           # Flutter Mobile Application
+    ├── pubspec.yaml                    # Frontend dependencies & assets
+    ├── analysis_options.yaml           # Flutter lint rules
+    │
+    ├── assets/                         # Static assets (images, fonts, etc.)
+    │
+    ├── lib/
+    │   ├── main.dart                   # App entry point
+    │   │
+    │   ├── app/
+    │   │   ├── waste_sorting_app.dart  # MaterialApp configuration & theme
+    │   │   └── app_shell.dart          # Bottom navigation bar shell
+    │   │
+    │   ├── core/
+    │   │   ├── config/
+    │   │   │   └── app_config.dart     # App-wide configuration constants
+    │   │   ├── models/                 # Dart data models
+    │   │   │   ├── app_user.dart
+    │   │   │   ├── eco_action.dart
+    │   │   │   ├── forum_post.dart
+    │   │   │   ├── message_thread.dart
+    │   │   │   ├── reward.dart
+    │   │   │   └── waste_category.dart
+    │   │   ├── services/
+    │   │   │   └── api_client.dart     # HTTP client for backend communication
+    │   │   ├── state/
+    │   │   │   └── mock_data.dart      # Mock data for offline development
+    │   │   └── theme/
+    │   │       └── app_theme.dart      # Material Design 3 theme definitions
+    │   │
+    │   └── features/                   # Feature-based UI modules
+    │       ├── home/
+    │       │   └── home_page.dart      # Home dashboard screen
+    │       ├── classify/
+    │       │   └── classify_page.dart  # AI classification screen
+    │       ├── rewards/
+    │       │   └── rewards_page.dart   # Eco rewards & points screen
+    │       ├── community/
+    │       │   └── community_page.dart # Community forum screen
+    │       ├── messages/
+    │       │   └── messages_page.dart  # In-app messages screen
+    │       └── profile/
+    │           └── profile_page.dart   # User profile screen
+    │
+    └── test/
+        └── widget_test.dart            # Basic widget test
 ```
 
-If Aliyun keys are not configured, `/classify-image` returns an explicit error.
+---
 
-## Frontend
+## 🗺 Roadmap
 
-- `API_BASE_URL`
-- `AMAP_WEATHER_KEY` (supported in ApiClient weather method)
+- [x] Project scaffolding (Flutter + Dart Shelf)
+- [x] Keyword-based classification engine
+- [x] Six core feature screens with mock data
+- [x] REST API with 8 endpoints
+- [x] Unit tests for backend service
+- [ ] **Image-based classification** (camera/gallery input + computer vision)
+- [ ] Replace keyword engine with a real **ML model** (TensorFlow Lite / cloud vision API)
+- [ ] **Persistent database** (PostgreSQL / Firebase Firestore)
+- [ ] **User authentication** (email/password + social login)
+- [ ] Push notifications for eco-tips and reward alerts
+- [ ] Leaderboard & gamification enhancements
+- [ ] Multi-language support (i18n)
+- [ ] iOS and web platform support
+- [ ] CI/CD pipeline for automated testing & deployment
 
-## Default Demo Accounts
+---
 
-Seed data creates demo users and accounts:
+## 🤝 Contributing
 
-- `alex.green@example.com / 123456`
-- `mia.chen@example.com / 123456`
-- `leo.wang@example.com / 123456`
-- `ava.smith@example.com / 123456`
+Contributions are welcome! This is a green-tech open-source project aiming to make a positive environmental impact.
 
-## API Reference (Current Routes)
+### How to Contribute
 
-Open endpoints:
-- `GET /`
-- `GET /health`
-- `POST /auth/register`
-- `POST /auth/login`
+1. **Fork** this repository
+2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+3. **Commit** your changes: `git commit -m 'feat: add amazing feature'`
+4. **Push** to your branch: `git push origin feature/amazing-feature`
+5. **Open** a Pull Request
 
-Authenticated endpoints (Bearer token):
+### Commit Convention
 
-### Classification
-- `GET /categories`
-- `POST /classify`
-- `POST /classify-image`
-- `GET /vision-logs?limit=20`
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
 
-### Eco Actions / Rewards
-- `GET /eco-actions`
-- `GET /eco-action-catalog`
-- `GET /eco-actions/history`
-- `POST /eco-actions/evaluate`
-- `GET /badges`
-- `POST /badges/redeem`
-- `GET /eco-dashboard`
-- `GET /rewards`
+- `feat:` — A new feature
+- `fix:` — A bug fix
+- `docs:` — Documentation changes
+- `refactor:` — Code restructuring without functional changes
+- `test:` — Adding or updating tests
+- `chore:` — Maintenance tasks (dependency updates, config changes)
 
-### Forum
-- `GET /forum-posts`
-- `POST /forum-posts`
-- `POST /forum-posts/:postId/like`
-- `GET /forum-posts/:postId/comments`
-- `POST /forum-posts/:postId/comments`
-- `POST /forum-comments/:commentId/like`
+### Development Notes
 
-### Messaging / Chat
-- `GET /messages` (legacy thread list)
-- `GET /chat/conversations`
-- `POST /chat/conversations/direct`
-- `GET /chat/messages`
-- `POST /chat/messages/text`
-- `POST /chat/messages/image`
-- `POST /chat/conversations/read`
-- `GET /chat/stream` (SSE)
+- The **frontend currently uses mock data** for stable UI previews. Switch to `ApiClient` by changing the data source in the feature pages.
+- The **backend uses in-memory seed data** and a keyword-based classifier. This is intentionally simple so it can be replaced with a real AI service.
+- All **UI text is in English**. i18n support is planned for a future release.
 
-### Profile
-- `GET /profile`
-- `POST /profile/update`
-- `POST /profile/avatar`
-- `POST /profile/change-password`
-- `GET /profile/recognition-history`
-- `GET /profile/point-history`
-- `GET /profile/badge-history`
-- `GET /profile/forum-posts`
+---
 
-## Database Notes
+## 📄 License
 
-The backend auto-creates and maintains tables on startup, including:
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
-- waste category / reward / eco action tables
-- forum posts/comments/likes
-- user/auth session tables
-- chat conversations/messages/participants
-- eco evaluation and point transaction tables
-- image recognition logs (`vision_classification_logs`)
+---
 
-Schema upgrades are handled incrementally in service initialization.
-
-## Testing
-
-Backend tests currently included:
-
-- `backend/test/routes_test.dart`
-- `backend/test/waste_data_service_test.dart`
-
-Run backend tests:
-
-```powershell
-cd backend
-dart test
-```
-
-## Known Notes
-
-- Frontend message module uses `/chat/*` endpoints; `/messages` remains available for compatibility.
-- Frontend has partial mock fallback in some pages (forum/messages) when backend is unavailable.
-- Authentication is token-based (Bearer token in API client).
-
-## License
-
-MIT
+<p align="center">
+  <sub>Built with ❤️ for a greener planet 🌍</sub>
+  <br>
+  <sub>© 2025 EcoSort AI. All rights reserved.</sub>
+</p>
