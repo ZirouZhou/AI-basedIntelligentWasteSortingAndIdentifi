@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EcoSort AI | Intelligent Waste Sorting App</title>
+    <meta
+      name="description"
+      content="EcoSort AI is a Flutter-based mobile app for intelligent waste sorting, eco rewards, and green community engagement."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero__bg"></div>
+      <nav class="nav container">
+        <div class="brand">
+          <span class="brand__dot"></span>
+          <span class="brand__text">EcoSort AI</span>
+        </div>
+        <a class="btn btn--ghost" href="#presentation-plan">Presentation Plan</a>
+      </nav>
+
+      <section class="hero__content container">
+        <p class="pill">Final App Presentation</p>
+        <h1>AI-Powered Waste Sorting, Built for Real Eco Habits</h1>
+        <p>
+          EcoSort AI helps users classify waste, track low-carbon actions, earn rewards,
+          and participate in a green community through one connected mobile experience.
+        </p>
+        <div class="hero__actions">
+          <a class="btn" href="#demo">Watch Demo</a>
+          <a class="btn btn--secondary" href="#features">Explore Features</a>
+        </div>
+      </section>
+    </header>
+
+    <main>
+      <section id="demo" class="section container">
+        <div class="section__heading">
+          <h2>App Demo (Video/GIF, max 3 mins)</h2>
+          <p>
+            Replace the placeholder below with your final demo video or GIF recorded from
+            a physical device or simulator.
+          </p>
+        </div>
+
+        <div class="demo-card">
+          <div class="demo-card__placeholder">
+            <p>Drop your demo file in <code>docs/assets/demo.mp4</code> or update the embed URL.</p>
+          </div>
+          <video controls preload="metadata" class="demo-card__video">
+            <source src="assets/demo.mp4" type="video/mp4" />
+            Your browser does not support HTML5 video.
+          </video>
+        </div>
+
+        <div class="tip">
+          <strong>Tip:</strong> Keep the demo focused on classify, rewards, forum/chat, and profile flow.
+        </div>
+      </section>
+
+      <section id="problem-solution" class="section section--alt">
+        <div class="container split">
+          <div>
+            <h2>Problem</h2>
+            <p>
+              Many users are unsure how to sort waste correctly, and motivation to sustain
+              eco-friendly behavior is often low without feedback or rewards.
+            </p>
+          </div>
+          <div>
+            <h2>Solution</h2>
+            <p>
+              EcoSort AI combines guided waste classification, behavior evaluation,
+              gamified rewards, and social participation to turn awareness into action.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section container">
+        <div class="section__heading">
+          <h2>Core App Modules</h2>
+          <p>These six modules match the final app architecture and navigation.</p>
+        </div>
+
+        <div class="grid grid--cards">
+          <article class="feature-card">
+            <h3>Home</h3>
+            <p>Dashboard with green score, recycled weight, and quick navigation.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Classify</h3>
+            <p>Image-based waste recognition with category confidence and disposal tips.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Rewards</h3>
+            <p>CO2 reduction evaluation, points accumulation, and badge redemption.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Forum</h3>
+            <p>Community posting, comments, likes, and peer interaction.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Messages</h3>
+            <p>Direct chat conversations with text/image messaging support.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Profile</h3>
+            <p>User info, recognition history, point history, and badge records.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="screens" class="section section--alt">
+        <div class="container">
+          <div class="section__heading">
+            <h2>Application Screens</h2>
+            <p>Real screenshots from the current build.</p>
+          </div>
+
+          <div class="gallery">
+            <figure><img src="assets/screenshots/login.jpg" alt="Login screen" /><figcaption>Login</figcaption></figure>
+            <figure><img src="assets/screenshots/Home.jpg" alt="Home screen" /><figcaption>Home</figcaption></figure>
+            <figure><img src="assets/screenshots/Classify.jpg" alt="Classify screen" /><figcaption>Classify</figcaption></figure>
+            <figure><img src="assets/screenshots/Rewards.jpg" alt="Rewards screen" /><figcaption>Rewards</figcaption></figure>
+            <figure><img src="assets/screenshots/Forum.jpg" alt="Forum screen" /><figcaption>Forum</figcaption></figure>
+            <figure><img src="assets/screenshots/Messages.jpg" alt="Messages screen" /><figcaption>Messages</figcaption></figure>
+            <figure><img src="assets/screenshots/Profile.jpg" alt="Profile screen" /><figcaption>Profile</figcaption></figure>
+          </div>
+        </div>
+      </section>
+
+      <section id="ux" class="section container">
+        <div class="section__heading">
+          <h2>UX Journey, Storyboarding, and Wireframe Flow</h2>
+          <p>Presentation-ready user journey from first use to sustained engagement.</p>
+        </div>
+
+        <ol class="timeline">
+          <li>
+            <h3>Step 1: Entry & Authentication</h3>
+            <p>User registers/logs in and enters a personalized app shell.</p>
+          </li>
+          <li>
+            <h3>Step 2: Waste Identification</h3>
+            <p>User captures/selects image, gets classification confidence and disposal guidance.</p>
+          </li>
+          <li>
+            <h3>Step 3: Eco Action Evaluation</h3>
+            <p>User records eco behavior, receives calculated CO2 reduction and points.</p>
+          </li>
+          <li>
+            <h3>Step 4: Motivation Loop</h3>
+            <p>User redeems badges, tracks progress in profile and dashboard metrics.</p>
+          </li>
+          <li>
+            <h3>Step 5: Community Participation</h3>
+            <p>User joins forum/chat discussions to share practical sorting experiences.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section id="data" class="section section--alt">
+        <div class="container">
+          <div class="section__heading">
+            <h2>Data Collection, Handling, and Management</h2>
+          </div>
+
+          <div class="grid grid--two">
+            <article class="info-card">
+              <h3>Collected Data</h3>
+              <ul>
+                <li>User account/profile data (name, email, city, avatar)</li>
+                <li>Classification logs (image URL, mapped category, confidence)</li>
+                <li>Eco action records (quantity, CO2 reduction, points)</li>
+                <li>Forum/chat interaction data</li>
+                <li>Badge and point history</li>
+              </ul>
+            </article>
+            <article class="info-card">
+              <h3>Handling Strategy</h3>
+              <ul>
+                <li>MySQL-backed persistence with service-layer abstraction</li>
+                <li>Token-based API authorization (Bearer token)</li>
+                <li>Input validation and explicit JSON error responses</li>
+                <li>Seed data + schema upgrade helpers for stable local development</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="integration" class="section container">
+        <div class="section__heading">
+          <h2>Technical Integration (App + Services)</h2>
+          <p>How mobile frontend and backend services work together.</p>
+        </div>
+
+        <div class="integration">
+          <div class="integration__column">
+            <h3>Frontend (Flutter)</h3>
+            <p>
+              Uses a centralized <code>ApiClient</code> for REST communication,
+              with modular screens and graceful fallback behavior in selected pages.
+            </p>
+          </div>
+          <div class="integration__arrow">?</div>
+          <div class="integration__column">
+            <h3>Backend (Dart Shelf)</h3>
+            <p>
+              Exposes authenticated REST endpoints for classification, rewards,
+              forum, messaging, and profile data.
+            </p>
+          </div>
+          <div class="integration__arrow">?</div>
+          <div class="integration__column">
+            <h3>External Services</h3>
+            <p>
+              Integrates Alibaba Cloud image recognition (optional runtime config)
+              and maps results into project waste categories.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="improvements" class="section section--alt">
+        <div class="container">
+          <div class="section__heading">
+            <h2>Conclusion: What We Would Improve with More Time</h2>
+          </div>
+
+          <ul class="improvements">
+            <li>Upgrade classification quality with a dedicated ML/CV model pipeline.</li>
+            <li>Expand automated tests for authorization, transactions, and chat concurrency.</li>
+            <li>Strengthen security (password hardening, token lifecycle, stricter CORS).</li>
+            <li>Enhance analytics and observability for engagement and performance.</li>
+            <li>Add multilingual UX and richer accessibility support.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="presentation-plan" class="section container">
+        <div class="section__heading">
+          <h2>15-Minute Presentation Breakdown</h2>
+          <p>Aligned with your marking rubric.</p>
+        </div>
+
+        <div class="plan">
+          <article>
+            <h3>1. Demo Video/GIF (20%)</h3>
+            <p>Up to 3 minutes showing key app tasks and user outcomes.</p>
+          </article>
+          <article>
+            <h3>2. Landing Page (20%)</h3>
+            <p>This page showcases value proposition, functionality, and architecture.</p>
+          </article>
+          <article>
+            <h3>3. App Overview (50%)</h3>
+            <p>
+              Cover design inception, storyboarding/wireframes, data handling,
+              interactivity, and API/service integration.
+            </p>
+          </article>
+          <article>
+            <h3>4. Presentation Style (10%)</h3>
+            <p>Clear flow, visual consistency, and confident delivery.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <p>EcoSort AI ¡¤ Final App Promotion Page</p>
+      </div>
+    </footer>
+  </body>
+</html>
