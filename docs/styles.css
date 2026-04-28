@@ -194,6 +194,13 @@ h1 {
   width: 100%;
   border-radius: 12px;
   border: 1px solid #cadbc7;
+  aspect-ratio: 16 / 9;
+  background: #0c1511;
+}
+
+.demo-card__video-wrap {
+  width: min(860px, 100%);
+  margin: 0 auto;
 }
 
 .demo-card__status {
@@ -401,5 +408,9 @@ code {
 
   .section {
     padding: 54px 0;
+  }
+
+  .demo-card__video {
+    aspect-ratio: 4 / 3;
   }
 }
