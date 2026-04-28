@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg: #f4f8ef;
   --surface: #ffffff;
   --surface-soft: #ecf5e6;
@@ -196,6 +196,21 @@ h1 {
   border: 1px solid #cadbc7;
 }
 
+.demo-card__status {
+  margin: 10px 2px 2px;
+  font-size: 0.92rem;
+  color: #355a47;
+}
+
+.demo-card__status--ok {
+  color: #1d7f46;
+}
+
+.demo-card__status--error {
+  color: #8d2f2f;
+  font-weight: 600;
+}
+
 .tip {
   margin-top: 12px;
   color: #2f5a45;
@@ -237,30 +252,42 @@ h1 {
   color: var(--ink-soft);
 }
 
+/* Screens section: show full screenshot (no crop) */
 .gallery {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .gallery figure {
   margin: 0;
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
+  box-shadow: 0 8px 22px rgba(18, 48, 34, 0.08);
 }
 
-.gallery img {
+.screen-frame {
+  background: linear-gradient(160deg, #f8faf7, #edf3ec);
+  padding: 10px;
+}
+
+.screen-frame img {
   width: 100%;
-  height: 230px;
-  object-fit: cover;
+  aspect-ratio: 9 / 19.5;
+  object-fit: contain;
+  object-position: top center;
+  background: #f0f3ef;
+  border-radius: 12px;
+  border: 1px solid #d8e2d6;
 }
 
 .gallery figcaption {
-  font-size: 0.88rem;
-  padding: 8px 10px;
-  color: #325543;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 10px 12px;
+  color: #234835;
 }
 
 .timeline {
@@ -306,8 +333,15 @@ h1 {
 .integration__arrow {
   display: grid;
   place-items: center;
-  font-size: 1.5rem;
-  color: #4b735f;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #2f6a50;
+  background: #e9f3e7;
+  border: 1px solid #c9dfc7;
+  border-radius: 999px;
+  width: 38px;
+  height: 38px;
+  align-self: center;
 }
 
 .improvements li {
@@ -339,7 +373,7 @@ code {
   }
 
   .gallery {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .integration {
@@ -368,19 +402,4 @@ code {
   .section {
     padding: 54px 0;
   }
-}
-
-.demo-card__status {
-  margin: 10px 2px 2px;
-  font-size: 0.92rem;
-  color: #355a47;
-}
-
-.demo-card__status--ok {
-  color: #1d7f46;
-}
-
-.demo-card__status--error {
-  color: #8d2f2f;
-  font-weight: 600;
 }
