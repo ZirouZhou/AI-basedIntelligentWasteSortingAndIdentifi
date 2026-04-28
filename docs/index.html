@@ -1,4 +1,4 @@
-<!doctype html>
+ï»¿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -53,12 +53,15 @@
 
         <div class="demo-card">
           <div class="demo-card__placeholder">
-            <p>Drop your demo file in <code>docs/assets/demo.mp4</code> or update the embed URL.</p>
+            <p>
+              Put your demo file under <code>docs/assets/</code> as one of:
+              <code>demo.mp4</code>, <code>demo.webm</code>, or <code>demo.ogg</code>.
+            </p>
           </div>
-          <video controls preload="metadata" class="demo-card__video">
-            <source src="assets/demo.mp4" type="video/mp4" />
+          <video controls preload="metadata" class="demo-card__video" id="demoVideo" playsinline>
             Your browser does not support HTML5 video.
           </video>
+          <p id="demoVideoStatus" class="demo-card__status" aria-live="polite"></p>
         </div>
 
         <div class="tip">
@@ -279,8 +282,68 @@
 
     <footer class="footer">
       <div class="container">
-        <p>EcoSort AI ¡¤ Final App Promotion Page</p>
+        <p>EcoSort AI Â· Final App Promotion Page</p>
       </div>
     </footer>
+      <script>
+      (function () {
+        const video = document.getElementById("demoVideo");
+        const status = document.getElementById("demoVideoStatus");
+        if (!video || !status) {
+          return;
+        }
+
+        const candidates = [
+          { path: "assets/demo.mp4", type: "video/mp4" },
+          { path: "assets/demo.webm", type: "video/webm" },
+          { path: "assets/demo.ogg", type: "video/ogg" },
+        ];
+
+        let index = -1;
+
+        function isSupported(type) {
+          return video.canPlayType(type) !== "";
+        }
+
+        function nextCandidate() {
+          index += 1;
+          while (index < candidates.length && !isSupported(candidates[index].type)) {
+            index += 1;
+          }
+          if (index >= candidates.length) {
+            status.textContent =
+              "No playable demo video found. Add docs/assets/demo.mp4 (H.264 + AAC recommended).";
+            status.classList.remove("demo-card__status--ok");
+            status.classList.add("demo-card__status--error");
+            return;
+          }
+
+          const item = candidates[index];
+          status.textContent = "Trying: " + item.path;
+          video.src = item.path;
+          video.load();
+        }
+
+        video.addEventListener("loadeddata", function () {
+          const item = candidates[index];
+          status.textContent = "Loaded demo file: " + (item ? item.path : "unknown");
+          status.classList.remove("demo-card__status--error");
+          status.classList.add("demo-card__status--ok");
+        });
+
+        video.addEventListener("error", function () {
+          if (index < candidates.length - 1) {
+            nextCandidate();
+          } else {
+            status.textContent =
+              "Video failed to load/decode. Re-export as MP4 (H.264 video + AAC audio) and place it at docs/assets/demo.mp4.";
+            status.classList.remove("demo-card__status--ok");
+            status.classList.add("demo-card__status--error");
+          }
+        });
+
+        nextCandidate();
+      })();
+    </script>
   </body>
 </html>
