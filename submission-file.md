@@ -8,39 +8,33 @@ date: "10 Dec 2021"
 
 -->
 
-# Submission Guide
-
-You will need to edit this file, create a PDF using the instructions below, from this file.   Sign it digitally and upload to Moodle
-
-## How to create a PDF from Markdown
-When finished you should export to PDF using VSCode and MarkdownPDF Extension. Make sure you select no headers and no footers in the
-extension preferences before exporting to PDF.   
-
-Upload this PDF into Moodle for submission including a copy of your presentation slides.
 
 ## Link to GitHub Repository
 
-Flutter Application Name - MY APPLICATION NAME
-GitHub Repository - [https://github.com/ucl-casa-ce/casa0015-mobile-assessment](https://github.com/ucl-casa-ce/casa0015-mobile-assessment)
+Flutter Application Name - EcoSort AI
+GitHub Repository - https://github.com/ZirouZhou/AI-basedIntelligentWasteSortingAndIdentifi
 
 ## Introduction to Application
 
-A brief 200 word explanation of your application and it's use.  Below create a Bibliography to code, tutorial, or plugins you've used in the project. Use this guide
-for citation - [https://www.scribbr.co.uk/referencing/harvard-website-reference/](https://www.scribbr.co.uk/referencing/harvard-website-reference/)
+EcoSort AI is an AI-based mobile application designed to promote waste sorting and eco-friendly behavior. The app offers an intelligent sorting mechanism that helps users classify waste correctly by using image inputs. Upon receiving input, the app provides real-time disposal guidance based on waste categories and local regulations, ensuring that users dispose of waste properly. The application also includes a reward system, where users earn points and badges for environmentally friendly actions. This encourages participation and fosters habits of sustainability. In addition, a forum function is also provided, enabling independent individuals to find like-minded groups.
+
+The app is powered by a backend built with Dart and MySQL, supporting a variety of features including user authentication, classification, and forum interactions. It utilizes AI image recognition services through Aliyun Vision for accurate waste categorization. The mobile frontend, developed in Flutter, enables users to navigate through features like the classification tool, rewards dashboard, forum, and profile management.
+
+The primary goal of EcoSort AI is to reduce environmental impact through education and behavioral reinforcement, offering actionable waste sorting guidance, tracking user progress, and incentivizing green actions
 
 ## Biblography
 
-1. Last name, First initial. (Year published). Title. Edition. (Only include the edition if it is not the first edition) City published: Publisher, Page(s). <http://google.com>
-
-2. Last name, First initial. (Year published). Title. Edition. (Only include the edition if it is not the first edition) City published: Publisher, Page(s).  <http://google.com>
-
+1. Flutter Documentation. "Flutter Overview." https://flutter.dev
+2. Aliyun Vision API Documentation. "Image Recognition Services." https://help.aliyun.com
+3. MySQL Documentation. "MySQL Database Management." https://dev.mysql.com/doc/
+4. Dart Documentation. "Dart Programming Language." https://dart.dev
 ----
 
 ## Declaration of Authorship
 
-We, AUTHORS NAME HERE, confirm that the work presented in this assessment is my own. Where information has been derived from other sources, I confirm that this has been indicated in the work.
+I, Zirou Zhou, confirm that the work presented in this assessment is my own. Where information has been derived from other sources, I confirm that this has been indicated in the work.
 
 
-Digitally Sign with Your name Here
+Digitally Sign: Zirou Zhou
 
-ASSESSMENT DATE
+2026.4.30
