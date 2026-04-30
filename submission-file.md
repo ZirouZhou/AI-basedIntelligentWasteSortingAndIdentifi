@@ -12,6 +12,7 @@ date: "10 Dec 2021"
 ## Link to GitHub Repository
 
 Flutter Application Name - EcoSort AI
+
 GitHub Repository - https://github.com/ZirouZhou/AI-basedIntelligentWasteSortingAndIdentifi
 
 ## Introduction to Application
